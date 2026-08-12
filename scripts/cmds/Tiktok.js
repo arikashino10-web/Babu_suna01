@@ -158,4 +158,3 @@ async function downloadVideo(videoInfo, api, event) {
         }
     }
         }
-                                            
