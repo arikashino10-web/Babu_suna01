@@ -6,10 +6,10 @@ module.exports = {
                 author: "NeoKEX",
                 countDown: 5,
                 role: 0,
-                requiredMoney: 5000,
+                requiredMoney: 500,
                 description: {
-                        vi: "Lệnh VIP - yêu cầu $5000 để sử dụng",
-                        en: "VIP command - requires $5000 to use"
+                        vi: "Lệnh VIP - yêu cầu $500 để sử dụng",
+                        en: "VIP command - requires $500 to use"
                 },
                 category: "premium",
                 guide: {
