@@ -1,119 +1,80 @@
-const a = require("axios");
-const b = require("fs");
-const c = require("path");
-const d = require("yt-search");
+const axios = require("axios");
 
-const nix = "https://raw.githubusercontent.com/aryannix/stuffs/master/raw/apis.json";
-
-async function getStream(url) {
-  const res = await a({ url, responseType: "stream" });
-  return res.data;
-}
-
-async function downloadSong(baseApi, url, api, event, title = null) {
-  try {
-    const apiUrl = `${baseApi}/play?url=${encodeURIComponent(url)}`;
-    const res = await a.get(apiUrl);
-    const data = res.data;
-
-    if (!data.status || !data.downloadUrl) throw new Error("API failed to return download URL.");
-
-    const songTitle = title || data.title;
-    const fileName = `${songTitle}.mp3`.replace(/[\\/:"*?<>|]/g, "");
-    const filePath = c.join(__dirname, fileName);
-
-    const songData = await a.get(data.downloadUrl, { responseType: "arraybuffer" });
-    b.writeFileSync(filePath, songData.data);
-
-    await api.sendMessage(
-      { body: `• ${songTitle}`, attachment: b.createReadStream(filePath) },
-      event.threadID,
-      () => b.unlinkSync(filePath),
-      event.messageID
-    );
-  } catch (err) {
-    console.error(err);
-    api.sendMessage(`❌ Failed to download song: ${err.message}`, event.threadID, event.messageID);
-  }
-}
+const mahmud = async () => {
+        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
+        return base.data.mahmud;
+};
 
 module.exports = {
-  config: {
-    name: "song",
-    aliases: ["music", "sing"],
-    version: "0.0.1",
-    author: "ArYAN",
-    countDown: 5,
-    role: 0,
-    shortDescription: "Sing tomake chai",
-    longDescription: "Search and download music from YouTube",
-    category: "MUSIC",
-    guide: "/play <song name or YouTube URL>"
-  },
-
-  onStart: async function ({ api: e, event: f, args: g, commandName: cmd }) {
-    let baseApi;
-    try {
-      const configRes = await a.get(nix);
-      baseApi = configRes.data && configRes.data.api;
-      if (!baseApi) throw new Error("Configuration Error: Missing API in GitHub JSON.");
-    } catch (error) {
-      return e.sendMessage("❌ Failed to fetch API configuration from GitHub.", f.threadID, f.messageID);
-    }
-    
-    if (!g.length) return e.sendMessage("❌ Provide a song name or YouTube URL.", f.threadID, f.messageID);
-
-    const aryan = g;
-    const query = aryan.join(" ");
-    if (query.startsWith("http")) return downloadSong(baseApi, query, e, f);
-
-    try {
-      const res = await d(query);
-      const results = res.videos.slice(0, 6);
-      if (!results.length) return e.sendMessage("❌ No results found.", f.threadID, f.messageID);
-
-      let msg = "";
-      results.forEach((v, i) => {
-        msg += `${i + 1}. ${v.title}\n⏱ ${v.timestamp} | 👀 ${v.views}\n\n`;
-      });
-
-      const thumbs = await Promise.all(results.map(v => getStream(v.thumbnail)));
-
-      e.sendMessage(
-        { body: msg + "Reply with number (1-6) to download song", attachment: thumbs },
-        f.threadID,
-        (err, info) => {
-          if (err) return console.error(err);
-          global.GoatBot.onReply.set(info.messageID, {
-            results,
-            messageID: info.messageID,
-            author: f.senderID,
-            commandName: cmd,
-            baseApi
-          });
+        config: {
+                name: "sing",
+                version: "1.7",
+                author: "MahMUD",
+                countDown: 10,
+                role: 0,
+                description: {
+                        bn: "যেকোনো গান সার্চ করে অডিও ফাইল ডাউনলোড করুন",
+                        en: "Search and download any song as an audio file",
+                        vi: "Tìm kiếm và tải xuống bất kỳ bài hát nào dưới dạng tệp âm thanh"
+                },
+                category: "music",
+                guide: {
+                        bn: '   {pn} <গানের নাম>: গান ডাউনলোড করতে নাম লিখুন',
+                        en: '   {pn} <song name>: Enter song name to download',
+                        vi: '   {pn} <tên bài hát>: Nhập tên bài hát để tải xuống'
+                }
         },
-        f.messageID
-      );
-    } catch (err) {
-      console.error(err);
-      e.sendMessage("❌ Failed to search YouTube.", f.threadID, f.messageID);
-    }
-  },
 
-  onReply: async function ({ api: e, event: f, Reply: g }) {
-    const results = g.results;
-    const baseApi = g.baseApi;
-    if (!baseApi) return e.sendMessage("❌ Session expired. Please restart the command.", f.threadID, f.messageID);
+        langs: {
+                bn: {
+                        noInput: "× বেবি, গানের নাম তো দাও! 🎵\nউদাহরণ: {pn} shape of you",
+                        success: "✅ | এই নাও তোমার গান বেবি <😘\n• 𝐒𝐨𝐧𝐠: %1",
+                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
+                },
+                en: {
+                        noInput: "× Baby, please provide a song name! 🎵\nExample: {pn} shape of you",
+                        success: "✅ | Here's your requested song baby <😘\n• 𝐒𝐨𝐧𝐠: %1",
+                        error: "× API error: %1. Contact MahMUD for help."
+                },
+                vi: {
+                        noInput: "× Cưng ơi, vui lòng cung cấp tên bài hát! 🎵\nVí dụ: {pn} shape of you",
+                        success: "✅ | Bài hát của cưng đây <😘\n• 𝐁𝐚̀𝐢 𝐡𝐚́𝐭: %1",
+                        error: "× Lỗi: %1. Liên hệ MahMUD để hỗ trợ."
+                }
+        },
 
-    const choice = parseInt(f.body);
+        onStart: async function ({ api, event, args, message, getLang }) {
+                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
+                if (this.config.author !== authorName) {
+                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
+                }
 
-    if (isNaN(choice) || choice < 1 || choice > results.length) {
-      return e.sendMessage("❌ Invalid selection.", f.threadID, f.messageID);
-    }
+                const query = args.join(" ");
+                if (!query) return message.reply(getLang("noInput"));
 
-    const selected = results[choice - 1];
-    await e.unsendMessage(g.messageID);
+                try {
+                        api.setMessageReaction("⌛", event.messageID, () => {}, true);
 
-    downloadSong(baseApi, selected.url, e, f, selected.title);
-  }
+                        const baseUrl = await mahmud();
+                        const apiUrl = `${baseUrl}/api/song/mahmud?query=${encodeURIComponent(query)}`;
+
+                        const response = await axios({
+                                method: "GET",
+                                url: apiUrl,
+                                responseType: "stream"
+                        });
+
+                        return message.reply({
+                                body: getLang("success", query),
+                                attachment: response.data
+                        }, () => {
+                                api.setMessageReaction("🪽", event.messageID, () => {}, true);
+                        });
+
+                } catch (err) {
+                        console.error("Sing Error:", err);
+                        api.setMessageReaction("❌", event.messageID, () => {}, true);
+                        return message.reply(getLang("error", err.message));
+                }
+        }
 };
