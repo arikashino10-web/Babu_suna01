@@ -1,79 +1,102 @@
-const a = require("axios");
-const nix = "https://raw.githubusercontent.com/aryannix/stuffs/master/raw/apis.json";
+const axios = require("axios");
+
+const baseApiUrl = async () => {
+        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
+        return base.data.mahmud;
+};
 
 module.exports = {
-  config: {
-    name: "gemini",
-    aliases: ["ai","chat"],
-    version: "0.0.1",
-    author: "ArYAN",
-    countDown: 3,
-    role: 0,
-    shortDescription: "Ask Gemini AI",
-    longDescription: "Talk with Gemini AI using Aryan's updated API",
-    category: "AI",
-    guide: "/gemini [your question]"
-  },
+        config: {
+                name: "gemini",
+                version: "3.7",
+                author: "MahMUD",
+                countDown: 10,
+                role: 0,
+                category: "ai",
+                guide: {
+                        vi: "   {pn} <câu hỏi>: Hỏi bất cứ điều gì với AI"
+                                + "\n   Hoặc phản hồi reply một hình ảnh kèm theo câu hỏi",
+                        en: "   {pn} <prompt>: Ask anything to AI"
+                                + "\n   Or reply to an image with a prompt"
+                }
+        },
 
-  onStart: async function({ api, event, args }) {
-    let e;
-    try {
-      const apiConfig = await a.get(nix);
-      e = apiConfig.data && apiConfig.data.api;
-      if (!e) throw new Error("Configuration Error: Missing API in GitHub JSON.");
-    } catch (error) {
-      api.sendMessage("❌ Failed to fetch API configuration from GitHub.", event.threadID, event.messageID);
-      return;
-    }
+        langs: {
+                en: {
+                        noPrompt: "• Baby, please provide a question\n\nExample: {pn} Who are you?",
+                        noResponse: "× No response received from AI.",
+                        error: "× API error: %1. Contact MahMUD for help.\n•WhatsApp: 01836298139"
+                },
+                vi: {
+                        noPrompt: "• Cưng ơi, vui lòng nhập câu hỏi! Ví dụ: {pn} Bạn là ai?",
+                        noResponse: "× Không nhận được phản hồi từ AI.",
+                        error: "× Lỗi API: %1. Liên hệ MahMUD để được trợ giúp.\n•WhatsApp: 01836298139"
+                }
+        },
 
-    const p = args.join(" ");
-    if (!p) return api.sendMessage("❌ Please provide a question or prompt.", event.threadID, event.messageID);
+        onStart: async function ({ api, event, args, message, getLang }) {
+                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
+                if (this.config.author !== authorName) {
+                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
+                }
 
-    api.setMessageReaction("⏳", event.messageID, () => {}, true);
+                const prompt = args.join(" ");
+                if (!prompt) return message.reply(getLang("noPrompt"));
 
-    try {
-      const r = await a.get(`${e}/gemini?prompt=${encodeURIComponent(p)}`);
-      const reply = r.data?.response; 
-      if (!reply) throw new Error("No response from Gemini API.");
+                let imageUrl = "";
+                if (event.type === "message_reply" && event.messageReply.attachments.length > 0) {
+                        const attachment = event.messageReply.attachments[0];
+                        if (attachment.type === "photo") {
+                                imageUrl = attachment.url;
+                        }
+                }
 
-      api.setMessageReaction("✅", event.messageID, () => {}, true);
+                return await handleGemini(api, event, prompt, imageUrl, this.config.name, getLang);
+        },
 
-      api.sendMessage(reply, event.threadID, (err, i) => {
-        if (!i) return;
-        global.GoatBot.onReply.set(i.messageID, { commandName: this.config.name, author: event.senderID, baseApi: e });
-      }, event.messageID);
+        onReply: async function ({ api, event, Reply, args, getLang }) {
+                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
+                if (this.config.author !== authorName) {
+                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
+                }
 
-    } catch (error) {
-      api.setMessageReaction("❌", event.messageID, () => {}, true);
-      api.sendMessage("⚠ Gemini API theke response pawa jachchhe na.", event.threadID, event.messageID);
-    }
-  },
+                if (Reply.author !== event.senderID) return;
+                
+                const prompt = args.join(" ");
+                if (!prompt) return;
 
-  onReply: async function({ api, event, Reply }) {
-    if ([api.getCurrentUserID()].includes(event.senderID)) return;
-    const { baseApi: e } = Reply;
-    if (!e) return api.sendMessage("❌ Session expired. Please start a new conversation.", event.threadID, event.messageID);
+                let imageUrl = "";
+                if (event.type === "message_reply" && event.messageReply.attachments.length > 0) {
+                        const attachment = event.messageReply.attachments[0];
+                        if (attachment.type === "photo") {
+                                imageUrl = attachment.url;
+                        }
+                }
 
-    const p = event.body;
-    if (!p) return;
-
-    api.setMessageReaction("⏳", event.messageID, () => {}, true);
-
-    try {
-      const r = await a.get(`${e}/gemini?prompt=${encodeURIComponent(p)}`);
-      const reply = r.data?.response; 
-      if (!reply) throw new Error("No response from Gemini API.");
-
-      api.setMessageReaction("✅", event.messageID, () => {}, true);
-
-      api.sendMessage(reply, event.threadID, (err, i) => {
-        if (!i) return;
-        global.GoatBot.onReply.set(i.messageID, { commandName: this.config.name, author: event.senderID, baseApi: e });
-      }, event.messageID);
-
-    } catch (error) {
-      api.setMessageReaction("❌", event.messageID, () => {}, true);
-      api.sendMessage("⚠ Gemini API er response dite somossa hocchhe.", event.threadID, event.messageID);
-    }
-  }
+                return await handleGemini(api, event, prompt, imageUrl, this.config.name, getLang);
+        }
 };
+
+async function handleGemini(api, event, prompt, imageUrl, commandName, getLang) {
+        try {
+                const response = imageUrl 
+                        ? await axios.get(`${await baseApiUrl()}/api/gemini?chat=${encodeURIComponent(prompt)}&url=${encodeURIComponent(imageUrl)}`)
+                        : await axios.get(`${await baseApiUrl()}/api/gemini?chat=${encodeURIComponent(prompt)}`);
+
+                const replyText = response.data.response || response.data.reply || getLang("noResponse");
+
+                api.sendMessage(replyText, event.threadID, (error, info) => {
+                        if (!error) {
+                                global.GoatBot.onReply.set(info.messageID, {
+                                        commandName: commandName,
+                                        author: event.senderID,
+                                        messageID: info.messageID,
+                                        type: "reply"
+                                });
+                        }
+                }, event.messageID);
+
+        } catch (err) {
+                api.sendMessage(getLang("error", err.message), event.threadID, event.messageID);
+        }
+                            }
