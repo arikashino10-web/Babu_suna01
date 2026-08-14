@@ -1,0 +1,70 @@
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
+
+module.exports = {
+  config: {
+    name: "owner",
+    version: "1.3.1",
+    author: "Mᴏʜᴀᴍᴍᴀᴅ Aᴋᴀsʜ (Fixed by AI)",
+    role: 0,
+    shortDescription: "Owner information with image",
+    category: "Information",
+    guide: {
+      en: "owner"
+    }
+  },
+
+  onStart: async function ({ api, event }) {
+    const ownerText = 
+`╭─ 👑 Oᴡɴᴇʀ Iɴғᴏ 👑 ─╮
+│ 👤 Nᴀᴍᴇ       : RORONOA JABED 
+│ 🧸 Nɪᴄᴋ       : JABED 
+│ 🎂 Aɢᴇ        : 18+
+│ 💘 Rᴇʟᴀᴛɪᴏɴ : Sɪɴɢʟᴇ
+│ 🎓 Pʀᴏғᴇssɪᴏɴ : Sᴛᴜᴅᴇɴᴛ
+│ 📚 Eᴅᴜᴄᴀᴛɪᴏɴ : Iɴᴛᴇʀ 2ɴᴅ Yᴇᴀʀ
+│ 🏡 Lᴏᴄᴀᴛɪᴏɴ : Cox's Bazar 
+├─ 🔗 Cᴏɴᴛᴀᴄᴛ ─╮
+│ 📘 Facebook  : "https://www.facebook.com/profile.php?id=61576355017916",
+│ 💬 Messenger: "https://m.me/61576355017916",
+│ 📞 WhatsApp  : wa.me/01840100926
+╰────────────────╯`;
+
+    // আপনার দেওয়া ছবির লিংক এখানে বসানো হয়েছে
+    const imgLink = "https://i.postimg.cc/prLHvQ11/1767018171452.jpg"; 
+
+    const cacheDir = path.join(__dirname, "cache");
+    const imgPath = path.join(cacheDir, `owner_${Date.now()}.jpg`);
+
+    try {
+      // cache ফোল্ডার তৈরি করা (যদি আগে থেকে না থাকে)
+      await fs.ensureDir(cacheDir);
+
+      // axios দিয়ে ছবি ডাউনলোড করা
+      const imgRes = await axios.get(imgLink, { responseType: "arraybuffer" });
+      await fs.writeFile(imgPath, Buffer.from(imgRes.data));
+
+      // ছবি ও মেসেজ পাঠানো
+      api.sendMessage(
+        {
+          body: ownerText,
+          attachment: fs.createReadStream(imgPath)
+        },
+        event.threadID,
+        () => {
+          // মেসেজ পাঠানোর পর cache থেকে ছবি ডিলিট করে দেওয়া
+          if (fs.existsSync(imgPath)) {
+            fs.unlinkSync(imgPath);
+          }
+        },
+        event.messageID
+      );
+    } catch (error) {
+      console.log("Image download error: ", error);
+      
+      // কোনো কারণে ছবি ডাউনলোড না হলে শুধু টেক্সট মেসেজটি পাঠাবে
+      api.sendMessage(ownerText, event.threadID, event.messageID);
+    }
+  }
+};
