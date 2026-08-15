@@ -1,9 +1,3 @@
-const axios = require("axios");
-
-const apiList = "https://raw.githubusercontent.com/shahadat-sahu/SAHU-API/refs/heads/main/SAHU-API.json";
-
-const getMainAPI = async () => (await axios.get(apiList)).data.simsimi;
-
 const responses = {
   "miss you": "অরেক বেডারে Miss না করে xan মেয়ে হলে বস সাহু রে হাঙ্গা করো😶👻😘",
   "miss u too": "হুম আমি ও তোমাকে Miss করি... কিন্তু সাহু বস বেশি করে 😏💖",
@@ -15,15 +9,15 @@ const responses = {
   "good morning": "GOOD MORNING দাত ব্রাশ করে খেয়ে নেও😚",
   "good night": "Sweet Dream babu… তবে আগে সাহু বস কে GN বলে নিও 😏💤",
   "tor ball": "~ এখনো বাল উঠে নাই নাকি তোমার?? 🤖",
-  "shahadat": "উনি এখন কাজে বিজি আছে কি বলবেন আমাকে বলতে পারেন..!😘",
+  "shahadat": " উনি এখন কাজে বিজি আছে কি বলবেন আমাকে বলতে পারেন..!😘",
   "owner": "‎[𝐎𝐖𝐍𝐄𝐑:☞ JABED ☜",
   "admin": "He is SHAHADAT SAHU তাকে সবাই Admin SAHU হিসেবে চিনে😘☺️",
   "babi": "এ তো হাছিনা হে মেরে দিলکی দারকান হে মেরি জান হে😍.",
-  "chup": "তুই চুপ চুপ কর পাগল ছাগল",
+  "chup": "तूइ चुप चुप कर पागल छागल",
   "assalamualaikum": "Walaikumassalam❤️‍🩹",
   "fork": "Sorry 😐 bby 🤧💔",
   "kiss me": "তুমি পঁচা তোমাকে কিস দিবো না 🤭",
-  "thanks": "এতো ধন্যবাদ না দিয়ে আমার বস সাহু রে তোর গার্লফ্রেন্ড টা দিয়ে দে..!🐸🥵",
+  "thanks": "এতো ধন্যবাদ না দিয়ে আমার বস সাহু রে তোর گار্লফ্রেন্ড টা দিয়ে দে..!🐸🥵",
   "i love you": "মেয়ে হলে আমার বস সাহু এর ইনবক্সে এখুনি গুঁতা দিন🫢😻",
   "love you": "ভালোবাসা নামক আবলামী করতে চাইলে Boss সাহু এর ইনবক্সে গুতা দিন 😘",
   "by": "কিরে তুই কই যাস কোন মেয়ের সাথে চিপায় যাবি..!🌚🌶️",
@@ -54,79 +48,17 @@ module.exports = {
     version: "2.0.0",
     role: 0,
     author: "SHAHADAT SAHU",
-    category: "Chat",
-    longDescription: "Automated chatbot reply system",
-    guide: {
-      en: "Just type the matching keywords to chat"
-    }
+    shortDescription: { en: "Automated chat reply" },
+    longDescription: { en: "Automated chatbot reply system" },
+    category: "Chat"
   },
 
-  onStart: async function ({ api, event }) {
-    // এটি খালি থাকবে কারণ এটি মেসেজ আসার সাথে সাথে (onChat) ট্রিগার হবে
-  },
+  onStart: async function () {},
 
-  onChat: async function ({ api, event }) {
-    const { threadID, messageID, body, senderID } = event;
-    if (!body) return;
-
-    const msg = body.toLowerCase().trim();
-
-    if (!responses[msg]) return;
-
-    if (!global.client) global.client = {};
-    if (!global.client.handleReply) global.client.handleReply = [];
-
-    return api.sendMessage(
-      responses[msg],
-      threadID,
-      (err, info) => {
-        if (info) {
-          global.client.handleReply.push({
-            name: "autoreplybot",
-            messageID: info.messageID,
-            author: senderID,
-            type: "sahu"
-          });
-        }
-      },
-      messageID
-    );
-  },
-
-  handleReply: async function ({ api, event, handleReply }) {
-    if (event.senderID !== handleReply.author) return;
-
-    try {
-      const text = event.body.trim();
-      const base = await getMainAPI();
-      const link = `${base}/simsimi?text=${encodeURIComponent(text)}`;
-      const res = await axios.get(link);
-
-      const reply = Array.isArray(res.data.response)
-        ? res.data.response[0]
-        : res.data.response;
-
-      if (!global.client) global.client = {};
-      if (!global.client.handleReply) global.client.handleReply = [];
-
-      return api.sendMessage(
-        reply,
-        event.threadID,
-        (err, info) => {
-          if (info) {
-            global.client.handleReply.push({
-              name: "autoreplybot",
-              messageID: info.messageID,
-              author: event.senderID,
-              type: "sahu"
-            });
-          }
-        },
-        event.messageID
-      );
-
-    } catch (e) {
-      return api.sendMessage("🙂 একটু পরে আবার বলো", event.threadID, event.messageID);
-    }
+  onChat: async function ({ message, event }) {
+    if (!event.body) return;
+    const msg = event.body.toLowerCase().trim();
+    if (responses[msg]) return message.reply(responses[msg]);
   }
 };
+      
