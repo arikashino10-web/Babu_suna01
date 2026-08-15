@@ -1,71 +1,76 @@
-module.exports.config = {
-    name: "adduser",
-    version: "1.1.0",
-    hasPermssion: 0,
-    credits: "Boss SAHU",
-    description: "Add user to group using profile link or UID",
-    commandCategory: "system",
-    usages: "[uid/link]",
-    cooldowns: 5
-};
-
 const axios = require("axios");
 
-module.exports.run = async ({ api, event, args }) => {
-    const { threadID, messageID } = event;
-    const out = msg => api.sendMessage(msg, threadID, messageID);
+module.exports = {
+  config: {
+    name: "adduser",
+    version: "1.1.0",
+    role: 0,
+    author: "Boss SAHU",
+    shortDescription: { en: "Add user to group" },
+    longDescription: { en: "Add user to group using profile link or Facebook UID" },
+    category: "system",
+    guide: { en: "[uid/link]" }
+  },
 
-    if (!args[0]) return out("UID বা Link দিন......");
+  onStart: async function ({ message, event, args, api }) {
+    const { threadID } = event;
 
-
-    if (!isNaN(args[0])) {
-        return addUserToGroup(args[0]);
+    if (!args || !args[0]) {
+      return message.reply("UID বা Link দিন......");
     }
 
+    // ইনপুট যদি সরাসরি সংখ্যা হয়, তবে সেটাকে UID ধরে অ্যাড করা হবে
+    if (!isNaN(args[0])) {
+      return addUserToGroup(args[0], threadID, message, api);
+    }
 
     let link = args[0];
     let uid = null;
 
     try {
-        if (!link.includes("facebook.com") && !link.includes("fb.com"))
-            return out("Facebook link দিন.....");
+      if (!link.includes("facebook.com") && !link.includes("fb.com")) {
+        return message.reply("Facebook link দিন.....");
+      }
 
-        let res = await axios.get(link);
-        let data = res.data;
+      let res = await axios.get(link);
+      let data = res.data;
 
-        
-        let match = data.match(/"userID":"(\d+)"/);
-        if (match) uid = match[1];
+      let match = data.match(/"userID":"(\d+)"/);
+      if (match) uid = match[1];
 
-        if (!uid) return out("UID পাওয়া যায়নি.....");
+      if (!uid) return message.reply("UID পাওয়া যায়নি.....");
 
-        return addUserToGroup(uid);
+      return addUserToGroup(uid, threadID, message, api);
 
     } catch (e) {
-        return out("Link থেকে UID বের করতে সমস্যা হয়েছে!");
+      return message.reply("Link থেকে UID বের করতে সমস্যা হয়েছে!");
     }
-
-    async function addUserToGroup(uid) {
-        try {
-            let info = await api.getThreadInfo(threadID);
-            let participantIDs = info.participantIDs.map(e => parseInt(e));
-            let admins = info.adminIDs.map(e => parseInt(e.id));
-            let botID = parseInt(api.getCurrentUserID());
-
-            uid = parseInt(uid);
-
-            if (participantIDs.includes(uid))
-                return out("এই ইউজার গ্রুপে আগেই আছে.....");
-
-            await api.addUserToGroup(uid, threadID);
-
-            if (info.approvalMode === true && !admins.includes(botID))
-                return out("Request list এ add হয়েছে ✔️");
-
-            return out("Successfully added ✔️");
-
-        } catch (err) {
-            return out("Add করা যাচ্ছে না..!\nএই ইউজার হয়তো Friendlist এ নেই........");
-        }
-    }
+  }
 };
+
+// অ্যাড করার মেইন ফাংশনটি নিচে আলাদা করা হয়েছে
+async function addUserToGroup(uid, threadID, message, api) {
+  try {
+    let info = await api.getThreadInfo(threadID);
+    let participantIDs = info.participantIDs.map(e => parseInt(e));
+    let admins = info.adminIDs.map(e => parseInt(e.id));
+    let botID = parseInt(api.getCurrentUserID());
+
+    uid = parseInt(uid);
+
+    if (participantIDs.includes(uid)) {
+      return message.reply("এই ইউজার গ্রুপে আগেই আছে.....");
+    }
+
+    await api.addUserToGroup(uid, threadID);
+
+    if (info.approvalMode === true && !admins.includes(botID)) {
+      return message.reply("Request list এ add হয়েছে ✔️");
+    }
+
+    return message.reply("Successfully added ✔️");
+
+  } catch (err) {
+    return message.reply("Add করা যাচ্ছে না..!\nএই ইউজার হয়তো Friendlist এ নেই........");
+  }
+                           }
