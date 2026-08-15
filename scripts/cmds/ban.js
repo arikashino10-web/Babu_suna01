@@ -1,77 +1,81 @@
-module.exports.config = {
-  name: "ban",
-  version: "2.4.0",
-  hasPermssion: 2,
-  credits: "SHAHADAT SAHU",
-  description: "Ban or unban a user directly, works on reply too",
-  commandCategory: "group",
-  usages: `${global.config.PREFIX}ban <UID/@tag>\n${global.config.PREFIX}unban <UID/@tag>`,
-  cooldowns: 5
-};
-
-module.exports.languages = {
-  "en": {
-    "banSuccess": "[ Ban User ] Banned user: %1",
-    "unbanSuccess": "[ Unban User ] Unbanned user: %1",
-    "errorReponse": "%1 Can't do what you request",
-    "IDNotFound": "%1 ID you import doesn't exist in database",
-    "notBanned": "[ Unban User ] User %1 is not banned.",
-  }
-}
-
-module.exports.run = async ({ event, api, args, Users, getText }) => {
-  const { threadID, messageID, messageReply } = event;
-
-  if (!args[0] && !messageReply) 
-    return api.sendMessage("Usage: ban <UID/@tag> or unban <UID/@tag>, or reply to a user's message", threadID, messageID);
-
-  const command = event.body.split(" ")[0].slice(global.config.PREFIX.length).toLowerCase(); // ban or unban
-  let targetID;
-  if (messageReply) {
-    targetID = messageReply.senderID;
-  }
-  else if (Object.keys(event.mentions).length > 0) {
-    targetID = Object.keys(event.mentions)[0];
-  } 
-  else {
-    targetID = args[0];
-  }
-
-  if (!targetID) return api.sendMessage("Please mention, reply, or give UID!", threadID, messageID);
-  if (isNaN(targetID)) return api.sendMessage("Invalid UID!", threadID, messageID);
-  if (!global.data.allUserID.includes(targetID)) 
-    return api.sendMessage(getText("IDNotFound", "[ User System ]"), threadID, messageID);
-
-  const nameTarget = global.data.userName.get(targetID) || await Users.getNameUser(targetID);
-
-  if (command === "ban") {
-    try {
-      let data = (await Users.getData(targetID)).data || {};
-      data.banned = true;
-      await Users.setData(targetID, { data });
-      global.data.userBanned.set(targetID, { reason: null, dateAdded: new Date().toLocaleString("en-GB", { timeZone: "Asia/Dhaka" }) });
-      return api.sendMessage(getText("banSuccess", `${targetID} - ${nameTarget}`), threadID, messageID);
-    } catch {
-      return api.sendMessage(getText("errorReponse", "[ Ban User ]"), threadID);
+module.exports = {
+  config: {
+    name: "ban",
+    version: "2.4.0",
+    role: 2, // hasPermssion: 2 এর পরিবর্তে role: 2 ব্যবহার করা হয়েছে
+    author: "SHAHADAT SAHU",
+    longDescription: "Ban or unban a user directly, works on reply too",
+    category: "group",
+    guide: {
+      en: "{pn} <UID/@tag> or unban <UID/@tag>"
     }
-  }
+  },
 
-  else if (command === "unban") {
-    try {
-      let data = (await Users.getData(targetID)).data || {};
-      if (!data.banned) return api.sendMessage(getText("notBanned", `${targetID} - ${nameTarget}`), threadID);
+  onStart: async function ({ event, api, args, Users }) {
+    const { threadID, messageID, messageReply } = event;
 
-      data.banned = false;
-      await Users.setData(targetID, { data });
-      global.data.userBanned.delete(targetID);
+    if (!args[0] && !messageReply) 
+      return api.sendMessage("Usage: ban <UID/@tag> or unban <UID/@tag>, or reply to a user's message", threadID, messageID);
 
-      return api.sendMessage(getText("unbanSuccess", `${targetID} - ${nameTarget}`), threadID, messageID);
-    } catch {
-      return api.sendMessage(getText("errorReponse", "[ Unban User ]"), threadID);
+    // PREFIX এরর দূর করতে সরাসরি event.body থেকে প্রথম শব্দ নেওয়া হয়েছে
+    const fullCommand = event.body.split(" ")[0].toLowerCase();
+    let command = "ban";
+    if (fullCommand.includes("unban")) command = "unban";
+
+    let targetID;
+    if (messageReply) {
+      targetID = messageReply.senderID;
     }
-  }
+    else if (Object.keys(event.mentions).length > 0) {
+      targetID = Object.keys(event.mentions)[0];
+    } 
+    else {
+      targetID = args[0];
+    }
 
-  else {
-    return api.sendMessage("Wrong input! Use ban/unban <UID/@tag> or reply to a user's message", threadID, messageID);
+    if (!targetID) return api.sendMessage("Please mention, reply, or give UID!", threadID, messageID);
+    if (isNaN(targetID)) return api.sendMessage("Invalid UID!", threadID, messageID);
+    if (global.data && global.data.allUserID && !global.data.allUserID.includes(targetID)) 
+      return api.sendMessage("[ User System ] ID you import doesn't exist in database", threadID, messageID);
+
+    let nameTarget = `${targetID}`;
+    try {
+      nameTarget = global.data?.userName?.get(targetID) || await Users.getNameUser(targetID);
+    } catch (e) {}
+
+    if (command === "ban") {
+      try {
+        let data = (await Users.getData(targetID)).data || {};
+        data.banned = true;
+        await Users.setData(targetID, { data });
+        if (global.data && global.data.userBanned) {
+          global.data.userBanned.set(targetID, { reason: null, dateAdded: new Date().toLocaleString("en-GB", { timeZone: "Asia/Dhaka" }) });
+        }
+        return api.sendMessage(`[ Ban User ] Banned user: ${targetID} - ${nameTarget}`, threadID, messageID);
+      } catch (err) {
+        return api.sendMessage("[ Ban User ] Can't do what you request", threadID);
+      }
+    }
+
+    else if (command === "unban") {
+      try {
+        let data = (await Users.getData(targetID)).data || {};
+        if (!data.banned) return api.sendMessage(`[ Unban User ] User ${targetID} - ${nameTarget} is not banned.`, threadID);
+
+        data.banned = false;
+        await Users.setData(targetID, { data });
+        if (global.data && global.data.userBanned) {
+          global.data.userBanned.delete(targetID);
+        }
+
+        return api.sendMessage(`[ Unban User ] Unbanned user: ${targetID} - ${nameTarget}`, threadID, messageID);
+      } catch (err) {
+        return api.sendMessage("[ Unban User ] Can't do what you request", threadID);
+      }
+    }
+
+    else {
+      return api.sendMessage("Wrong input! Use ban/unban <UID/@tag> or reply to a user's message", threadID, messageID);
+    }
   }
 };
