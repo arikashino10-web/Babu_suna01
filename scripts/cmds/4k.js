@@ -1,52 +1,71 @@
 const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
-const sharp = require("sharp");
 
 module.exports = {
   config: {
     name: "4k",
-    version: "2.1.0",
+    aliases: ["hd", "upscale", "enhance"],
+    version: "2.5.0",
     author: "Arafat",
-    countDown: 5,
+    countDown: 8,
     role: 0,
     shortDescription: { en: "High Quality Image Enhancer" },
-    category: "image"
+    longDescription: { en: "Convert your low-quality images into high-quality HD/4K images using AI." },
+    category: "image",
+    guide: { en: "Reply to an image with {pn}" }
   },
 
   onStart: async function ({ message, event, api }) {
     const { messageReply, messageID, threadID } = event;
-    if (!messageReply?.attachments?.[0]?.url) return message.reply("❌ Please reply to an image.");
+    
+    // 📸 ইউজার ছবিতে রিপ্লাই করেছে কি না চেক
+    if (!messageReply || !messageReply.attachments || messageReply.attachments.length === 0) {
+        return message.reply("❌ Please reply to an image to enhance it!");
+    }
 
-    const imageUrl = messageReply.attachments[0].url;
-    const apiBase = "https://4k-v2.vercel.app"; 
+    const attachment = messageReply.attachments[0];
+    if (attachment.type !== "photo") {
+        return message.reply("❌ This is not a valid image. Please reply to a photo!");
+    }
 
-    message.reaction("⚡", messageID);
-    const loadingMsg = await api.sendMessage("⚡ Enhancing...", threadID);
+    const imageUrl = attachment.url;
+    
+    // ⚡ রি-অ্যাকশন এবং লোডিং মেসেজ (Goat-Bot মেথড ফিক্স)
+    message.react("⚡");
+    const loadingMsg = await api.sendMessage("⏳ AI is enhancing your image... Please wait a moment.", threadID, messageID);
 
     try {
-      const response = await axios.get(`${apiBase}/api/enhance?url=${encodeURIComponent(imageUrl)}`);
-      const resultUrl = response.data.imageUrl;
+      // 🌐 শক্তিশালী ও দ্রুতগতির আপডেটেড এপিআই
+      const apiRes = await axios.get(`https://samirxp.com{encodeURIComponent(imageUrl)}`);
+      const resultUrl = apiRes.data.url || apiRes.data.imageUrl || apiRes.data.result;
 
-      if (!resultUrl) throw new Error("No URL");
+      if (!resultUrl) {
+          throw new Error("API failed to generate high-quality image URL.");
+      }
 
-      const img = await axios.get(resultUrl, { responseType: "arraybuffer" });
-      const cacheDir = path.join(__dirname, "cache");
-      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
-      
-      const filePath = path.join(cacheDir, `hd_${Date.now()}.jpg`);
-      await sharp(Buffer.from(img.data)).jpeg({ quality: 100 }).toFile(filePath);
+      // 📥 লাইভ ইউআরএল থেকে ইমেজ স্ট্রিম সরাসরি মেসেঞ্জারে পাঠানো হচ্ছে
+      const stream = await global.utils.getStreamFromURL(resultUrl);
 
-      api.unsendMessage(loadingMsg.messageID);
-      await message.reply({ attachment: fs.createReadStream(filePath) });
-      
-      message.reaction("✅", messageID);
-      
-      setTimeout(() => { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); }, 5000);
+      // লোডিং মেসেজটি ডিলিট করে দেওয়া হচ্ছে
+      try {
+          await api.unsendMessage(loadingMsg.messageID);
+      } catch(e) {}
+
+      message.react("✅");
+      return message.reply({
+          body: "✨ Here is your enhanced 4K Image!",
+          attachment: stream
+        });
+
     } catch (err) {
-      api.unsendMessage(loadingMsg.messageID);
-      message.reply("❌ Error! Could not enhance the image.");
-      message.reaction("💔", messageID);
+      // যেকোনো এরর হলে লোডিং মেসেজ রিমুভ ও নোটিফিকেশন সেন্ড
+      try {
+          await api.unsendMessage(loadingMsg.messageID);
+      } catch(e) {}
+      
+      message.react("❌");
+      return message.reply(`❌ Failed to enhance the image.\n👉 Error: ${err.message}`);
     }
   }
 };
