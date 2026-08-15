@@ -14,7 +14,7 @@
   "notesLanguage": "change to your language with ISO 639-1 code, available languages: vi (Vietnamese), en (English)",
   "nickNameBot": "⤾➝Mommy NICO ROBIN↬⤹🪼🩷🪻⇣",
   "prefix": ".", 
-  "reactUnsend": ["🤠"]
+  "reactUnsend": ["🤠"],
   "adminOnly": {
     "enable": false,
     "ignoreCommand": []
