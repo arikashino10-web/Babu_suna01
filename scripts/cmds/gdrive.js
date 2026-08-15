@@ -7,9 +7,23 @@ const CREDENTIALS_PATH = path.join(process.cwd(), "credentials.json");
 const DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"];
 let drive = null;
 
-if (fs.existsSync(CREDENTIALS_PATH)) {
+// প্রথমে চেষ্টা করা হচ্ছে GOOGLE_CREDENTIALS environment variable থেকে পড়তে
+// (Railway/Render-এর মতো হোস্টিং-এ যেখানে credentials.json ফাইল হিসেবে রাখা যায় না)
+let credentialsJSON = null;
+if (process.env.GOOGLE_CREDENTIALS) {
+    try {
+        credentialsJSON = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    } catch (e) {
+        console.log("❌ GOOGLE_CREDENTIALS environment variable ভ্যালিড JSON না:", e.message);
+    }
+} else if (fs.existsSync(CREDENTIALS_PATH)) {
+    // environment variable না থাকলে লোকাল credentials.json ফাইল থেকে পড়া হচ্ছে
+    credentialsJSON = fs.readJsonSync(CREDENTIALS_PATH);
+}
+
+if (credentialsJSON) {
     const auth = new google.auth.GoogleAuth({
-        keyFile: CREDENTIALS_PATH,
+        credentials: credentialsJSON,
         scopes: DRIVE_SCOPES
     });
     drive = google.drive({ version: "v3", auth });
