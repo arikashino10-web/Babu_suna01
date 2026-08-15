@@ -1,7 +1,7 @@
 [
     {
-        "domain": ".facebook.com",
-        "expirationDate": 1813743501.85201,
+        "domain": ".facebookcom",
+        "expirationDate": 181374350185201,
         "hostOnly": false,
         "httpOnly": true,
         "name": "ps_l",
