@@ -2,23 +2,6 @@ const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
 
-module.exports.config = {
-  name: "couple",
-  version: "1.0.0",
-  hasPermssion: 0,
-  credits: "SHAHADAT SAHU",
-  description: "Generate a crush banner image using sender and target Facebook UID via Avatar Canvas API",
-  commandCategory: "banner",
-  usePrefix: true,
-  usages: "[@mention | reply]",
-  cooldowns: 5,
-  dependencies: {
-    "axios": "",
-    "fs-extra": "",
-    "path": ""
-  }
-};
-
 const CRUSH2_CAPTIONS = [
 `💛🌻
 তোমার নামটা শুনলেই
@@ -58,68 +41,91 @@ Crush বলেই চেনে 🫶`,
 ভালো লেগে যাওয়া 🙂`
 ];
 
-module.exports.run = async function ({ event, api }) {
-  const { threadID, messageID, senderID, mentions, messageReply } = event;
+module.exports = {
+  config: {
+    name: "couple",
+    version: "1.0.0",
+    role: 0,
+    author: "SHAHADAT SAHU",
+    longDescription: "Generate a crush banner image using sender and target Facebook UID via Avatar Canvas API",
+    category: "banner",
+    guide: {
+      en: "[@mention | reply]"
+    }
+  },
 
-  let targetID = null;
+  onStart: async function ({ event, api, args }) {
+    const { threadID, messageID, senderID, mentions, messageReply } = event;
 
-  if (mentions && Object.keys(mentions).length > 0) {
-    targetID = Object.keys(mentions)[0];
-  } else if (messageReply && messageReply.senderID) {
-    targetID = messageReply.senderID;
-  }
+    let targetID = null;
 
-  if (!targetID) {
-    return api.sendMessage(
-      "Please reply or mention someone......",
-      threadID,
-      messageID
-    );
-  }
+    if (mentions && Object.keys(mentions).length > 0) {
+      targetID = Object.keys(mentions)[0];
+    } else if (messageReply && messageReply.senderID) {
+      targetID = messageReply.senderID;
+    }
 
-  try {
-    const apiList = await axios.get(
-      "https://gitlab.com/shahadat-sahu/sahu-api/-/raw/main/API.json"
-    );
+    if (!targetID) {
+      return api.sendMessage(
+        "Please reply or mention someone......",
+        threadID,
+        messageID
+      );
+    }
 
-    const AVATAR_CANVAS_API = apiList.data.AvatarCanvas;
+    try {
+      const apiList = await axios.get(
+        "https://gitlab.com/shahadat-sahu/sahu-api/-/raw/main/API.json"
+      );
 
-    const res = await axios.post(
-      `${AVATAR_CANVAS_API}/api`,
-      {
-        cmd: "crush2",
-        senderID,
-        targetID
-      },
-      { responseType: "arraybuffer", timeout: 30000 }
-    );
+      const AVATAR_CANVAS_API = apiList.data.AvatarCanvas;
 
-    const imgPath = path.join(
-      __dirname,
-      "cache",
-      `crush2_${senderID}_${targetID}.png`
-    );
+      const res = await axios.post(
+        `${AVATAR_CANVAS_API}/api`,
+        {
+          cmd: "crush2",
+          senderID,
+          targetID
+        },
+        { responseType: "arraybuffer", timeout: 30000 }
+      );
 
-    fs.writeFileSync(imgPath, res.data);
+      // নিশ্চিত করার জন্য ক্যাশ ডিরেক্টরি তৈরি করা
+      const cacheDir = path.join(__dirname, "cache");
+      if (!fs.existsSync(cacheDir)) {
+        fs.ensureDirSync(cacheDir);
+      }
 
-    const caption =
-      CRUSH2_CAPTIONS[Math.floor(Math.random() * CRUSH2_CAPTIONS.length)];
+      const imgPath = path.join(
+        cacheDir,
+        `crush2_${senderID}_${targetID}.png`
+      );
 
-    return api.sendMessage(
-      {
-        body: caption,
-        attachment: fs.createReadStream(imgPath)
-      },
-      threadID,
-      () => fs.unlinkSync(imgPath),
-      messageID
-    );
+      fs.writeFileSync(imgPath, res.data);
 
-  } catch {
-    return api.sendMessage(
-      "API Error Call Boss SAHU",
-      threadID,
-      messageID
-    );
+      const caption =
+        CRUSH2_CAPTIONS[Math.floor(Math.random() * CRUSH2_CAPTIONS.length)];
+
+      return api.sendMessage(
+        {
+          body: caption,
+          attachment: fs.createReadStream(imgPath)
+        },
+        threadID,
+        () => {
+          try {
+            fs.unlinkSync(imgPath);
+          } catch(e) {}
+        },
+        messageID
+      );
+
+    } catch (error) {
+      return api.sendMessage(
+        "API Error Call Boss SAHU",
+        threadID,
+        messageID
+      );
+    }
   }
 };
