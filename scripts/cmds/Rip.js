@@ -2,81 +2,59 @@ const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
 
-module.exports.config = {
-  name: "rip",
-  version: "1.0.0",
-  hasPermssion: 0,
-  credits: "SHAHADAT SAHU",
-  description: "Generate a RIP banner image using target Facebook UID via Avatar Canvas API",
-  commandCategory: "banner",
-  usePrefix: true,
-  usages: "[@mention | reply]",
-  cooldowns: 0,
-  dependencies: {
-    "axios": "",
-    "fs-extra": "",
-    "path": ""
-  }
-};
+module.exports = {
+  config: {
+    name: "rip",
+    version: "1.0.0",
+    role: 0,
+    author: "SHAHADAT SAHU",
+    shortDescription: { en: "Generate a RIP banner image" },
+    longDescription: { en: "Generate a RIP banner image using target Facebook UID via Avatar Canvas API" },
+    category: "banner",
+    guide: { en: "[@mention | reply]" }
+  },
 
-module.exports.run = async function ({ event, api }) {
-  const { threadID, messageID, mentions, messageReply } = event;
+  onStart: async function ({ message, event }) {
+    const { senderID, mentions, messageReply } = event;
 
-  let targetID = null;
+    let targetID = messageReply ? messageReply.senderID : (mentions && Object.keys(mentions).length > 0 ? Object.keys(mentions) : null);
 
-  if (mentions && Object.keys(mentions).length > 0) {
-    targetID = Object.keys(mentions)[0];
-  } else if (messageReply && messageReply.senderID) {
-    targetID = messageReply.senderID;
-  }
+    if (!targetID) {
+      return message.reply("Please reply or mention someone......");
+    }
 
-  if (!targetID) {
-    return api.sendMessage(
-      "Please reply or mention someone......",
-      threadID,
-      messageID
-    );
-  }
+    try {
+      const apiList = await axios.get("https://gitlab.com/shahadat-sahu/sahu-api/-/raw/main/API.json");
+      const AVATAR_CANVAS_API = apiList.data.AvatarCanvas;
 
-  try {
-    const apiList = await axios.get(
-      "https://gitlab.com/shahadat-sahu/sahu-api/-/raw/main/API.json"
-    );
+      const res = await axios.post(
+        `${AVATAR_CANVAS_API}/api`,
+        {
+          cmd: "rip",
+          senderID: targetID
+        },
+        { responseType: "arraybuffer", timeout: 30000 }
+      );
 
-    const AVATAR_CANVAS_API = apiList.data.AvatarCanvas;
+      // ক্যাশ ডিরেক্টরি পারফেক্টলি হ্যান্ডেল করা
+      const cacheDir = path.join(__dirname, "cache");
+      if (!fs.existsSync(cacheDir)) {
+        fs.ensureDirSync(cacheDir);
+      }
 
-    const res = await axios.post(
-      `${AVATAR_CANVAS_API}/api`,
-      {
-        cmd: "rip",
-        senderID: targetID
-      },
-      { responseType: "arraybuffer", timeout: 30000 }
-    );
+      const imgPath = path.join(cacheDir, `rip_${targetID}.png`);
+      fs.writeFileSync(imgPath, res.data);
 
-    const imgPath = path.join(
-      __dirname,
-      "cache",
-      `rip_${targetID}.png`
-    );
-
-    fs.writeFileSync(imgPath, res.data);
-
-    return api.sendMessage(
-      {
-        body: "",
+      // আপনার বটের আসল নিয়ম অনুযায়ী ইমেজ রেসপন্স পাঠানো
+      return message.reply({
+        body: "Rest In Peace 😭⚰️",
         attachment: fs.createReadStream(imgPath)
-      },
-      threadID,
-      () => fs.unlinkSync(imgPath),
-      messageID
-    );
+      }, () => {
+        try { fs.unlinkSync(imgPath); } catch(e) {}
+      });
 
-  } catch (e) {
-    return api.sendMessage(
-      "API Error Call Boss SAHU",
-      threadID,
-      messageID
-    );
+    } catch (e) {
+      return message.reply("API Error Call Boss SAHU");
+    }
   }
 };
