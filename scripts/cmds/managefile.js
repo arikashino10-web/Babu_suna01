@@ -3,7 +3,7 @@ const path = require("path");
 
 module.exports = {
  config: {
- name: "file",
+ name: "managefile",
  aliases: ["managefile"],
  version: "1.0.0",
  author: "SHAHADAT SAHU",
