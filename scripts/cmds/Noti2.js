@@ -1,140 +1,124 @@
-const fs = require('fs-extra');
-const axios = require('axios');
-const path = require('path');
-
-let atmDir = [];
-
-async function getAtm(attachments, bodyText) {
-  let msgObject = { body: bodyText, attachment: [] };
-  const cacheDir = path.join(__dirname, "cache");
-  if (!fs.existsSync(cacheDir)) fs.ensureDirSync(cacheDir);
-
-  for (let file of attachments) {
-    try {
-      const res = await axios.get(file.url, { responseType: 'arraybuffer' });
-      const ext = file.url.split('.').pop().split('?')[0] || 'png';
-      const fileName = `noti_${Date.now()}.${ext}`;
-      const filePath = path.join(cacheDir, fileName);
-      
-      fs.writeFileSync(filePath, res.data);
-      msgObject.attachment.push(fs.createReadStream(filePath));
-      atmDir.push(filePath);
-    } catch (err) {
-      console.log(err);
-    }
-  }
-  return msgObject;
-}
+const fs = require("fs-extra");
+const path = require("path");
+const axios = require("axios");
 
 module.exports = {
   config: {
     name: "noti2",
-    version: "1.0.0",
-    role: 2, // এডমিনদের জন্য পারমিশন লক করা
-    author: "MAHBUB SHAON",
-    shortDescription: { en: "Send notification to all groups" },
-    longDescription: { en: "Send an admin notification to all chat groups with reply support" },
-    category: "sandnoto",
-    guide: { en: "[msg]" }
+    version: "2.5.0",
+    author: "System",
+    role: 2,
+    shortDescription: "Send attachment directly to all groups",
+    longDescription: "Broadcast audio/video/file directly without links",
+    category: "admin",
+    guide: "{p}noti2 [reply to attachment with text]"
   },
 
-  onStart: async function ({ message, event, args, Users, api }) {
-    const { threadID, messageID, senderID, messageReply } = event;
-    if (!args[0]) return message.reply("Please input message");
-
-    let allThreads = global.data?.allThreadID || [];
-    let successCount = 0;
-    let failCount = 0;
+  onStart: async function ({ api, event, args }) {
+    const { threadID, messageID, messageReply, senderID } = event;
     
-    const adminName = await Users.getNameUser(senderID);
-    let baseText = `𝐀𝐃𝐌𝐈𝐍 𝐍𝐎𝐓𝐈𝐅𝐈𝐂𝐀𝐓𝐈𝐎𝐍\n•┄┅═════❁🌺❁═════┅┄•\n\n𝐌𝐀𝐒𝐒𝐀𝐆𝐄: ${args.join(" ")}\n\n𝗔𝗗𝗠𝗜𝗡 🇳🇦🇲🇪: ${adminName} `;
-    
-    let sendData = baseText;
-    if (event.type == "message_reply" && messageReply.attachments && messageReply.attachments.length > 0) {
-      sendData = await getAtm(messageReply.attachments, `𝐌𝐀𝐒𝐒𝐀𝐆𝐄 𝐅𝐑𝐎𝐌 𝐀𝐃𝐌𝐈𝐍\n•┄┅═════❁🌺❁═════┅┄•\n𝐌𝐀𝐒𝐒𝐀𝐆𝐄: ${args.join(" ")}\n\n𝗔𝗗𝗠𝗜𝗡 🇳🇦🇲🇪: ${adminName}`);
+    // ১. বট অ্যাডমিন পারমিশন চেক
+    const adminIDs = global.GoatBot.config.adminBot || [];
+    if (!adminIDs.includes(senderID)) {
+      return api.sendMessage("❌ শুধু বট অ্যাডমিন ব্যবহার করতে পারবে", threadID, messageID);
     }
 
-    for (let id of allThreads) {
-      try {
-        await new Promise((resolve) => {
-          api.sendMessage(sendData, id, (err, info) => {
-            if (err) {
-              failCount++;
-            } else {
-              successCount++;
-              if (global.client && global.client.handleReply) {
-                global.client.handleReply.push({
-                  name: "noti2",
-                  type: "sendnoti",
-                  messageID: info.messageID,
-                  messID: messageID,
-                  threadID: threadID
-                });
-              }
-            }
-            resolve();
-          });
+    // ২. অ্যাটাচমেন্ট রিপ্লাই চেক
+    if (!messageReply || !messageReply.attachments || messageReply.attachments.length === 0) {
+      return api.sendMessage("❌ কোনো অডিও/ভিডিও/ছবি/গিফ রিপ্লাই করে !noti2 লিখুন", threadID, messageID);
+    }
+
+    let text = args.join(" ").trim();
+    if (!text) text = messageReply.body || "📢 বট নোটিফিকেশন";
+
+    // ৩. বটের সব গ্রুপ আইডি বের করা (১০০০ গ্রুপ পর্যন্ত লিমিট বাড়ানো হয়েছে)
+    let allThreads = [];
+    try {
+      const threadList = await api.getThreadList(1000, null, ["INBOX"]);
+      allThreads = threadList
+        .filter(t => t.isGroup === true && t.threadID !== threadID)
+        .map(t => t.threadID);
+    } catch (e) {
+      const dbThreads = global.db?.allThreadData || [];
+      allThreads = dbThreads
+        .filter(t => t.threadID && t.threadID !== threadID)
+        .map(t => t.threadID);
+    }
+
+    if (allThreads.length === 0) {
+      return api.sendMessage("❌ কোনো গ্রুপ পাওয়া যায়নি", threadID, messageID);
+    }
+
+    api.sendMessage(`📤 বটের সব (${allThreads.lengthটি}) গ্রুপে সরাসরি ফাইল পাঠানো শুরু হলো...`, threadID, messageID);
+
+    // ৪. ফাইলটি বটের লোকাল ক্যাশে আসল ফাইল হিসেবে ডাউনলোড করা
+    const attachmentPaths = [];
+    const cacheDir = path.join(__dirname, "cache");
+    if (!fs.existsSync(cacheDir)) fs.ensureDirSync(cacheDir);
+
+    try {
+      for (let i = 0; i < messageReply.attachments.length; i++) {
+        const att = messageReply.attachments[i];
+        let ext = "bin";
+        
+        // ফাইল ফরম্যাট চেক
+        if (att.type === "photo") ext = "jpg";
+        else if (att.type === "video") ext = "mp4";
+        else if (att.type === "audio") ext = "mp3";
+        else if (att.type === "animated_image") ext = "gif";
+
+        const filePath = path.join(cacheDir, `direct_${Date.now()}_${i}.${ext}`);
+        
+        // ফেসবুকের লিংক থেকে সরাসরি ফাইল নামানো
+        const response = await axios({
+          method: "get",
+          url: att.url,
+          responseType: "stream",
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+          }
         });
-      } catch (e) {
-        failCount++;
+
+        const writer = fs.createWriteStream(filePath);
+        response.data.pipe(writer);
+
+        await new Promise((resolve, reject) => {
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+        });
+
+        attachmentPaths.push(filePath);
       }
+    } catch (downloadError) {
+      console.error(downloadError);
+      return api.sendMessage("❌ ফাইল প্রসেস করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", threadID, messageID);
     }
 
-    // ফাইল পাঠানোর পর ক্যাশ ডিলিট করা
-    atmDir.forEach(p => { try { fs.unlinkSync(p); } catch(e){} });
-    atmDir = [];
-
-    return message.reply(`Send to ${successCount} thread, not send to ${failCount} thread`);
-  },
-
-  handleReply: async function ({ message, event, handleReply, Users, api }) {
-    const { threadID, messageID, senderID, body, attachments } = event;
-    let userName = await Users.getNameUser(senderID);
-
-    if (handleReply.type === "sendnoti") {
-      let replyText = `== User Reply ==\n\n『Reply』 : ${body}\n\n\nUser Name ${userName} \nFrom Group ${threadID}`;
-      let sendData = replyText;
-
-      if (attachments && attachments.length > 0) {
-        sendData = await getAtm(attachments, `== User Reply ==\n\n『Reply』 : ${body}\n\n\nUser Name: ${userName} \nFrom Group ${threadID}`);
+    // ৫. লুপের মাধ্যমে প্রতিটি গ্রুপে সরাসরি ফাইল আপলোড
+    let success = 0, fail = 0;
+    for (const tid of allThreads) {
+      try {
+        const directAttachments = attachmentPaths.map(p => fs.createReadStream(p));
+        
+        await api.sendMessage({
+          body: text,
+          attachment: directAttachments
+        }, tid);
+        
+        success++;
+      } catch (err) {
+        fail++;
+        console.log(`[noti2] Failed to upload to ${tid}:`, err.message);
       }
-
-      api.sendMessage(sendData, handleReply.threadID, (err, info) => {
-        atmDir.forEach(p => { try { fs.unlinkSync(p); } catch(e){} });
-        atmDir = [];
-        if (global.client && global.client.handleReply) {
-          global.client.handleReply.push({
-            name: "noti2",
-            type: "reply",
-            messageID: info.messageID,
-            messID: messageID,
-            threadID: threadID
-          });
-        }
-      });
-    } 
-    
-    else if (handleReply.type === "reply") {
-      let adminNotice = `𝐀𝐃𝐌𝐈𝐍 𝐍𝐎𝐓𝐈𝐅𝐈𝐂𝐀𝐓𝐈𝐎𝐍\n•┄┅═════❁🌺❁═════┅┄•\n\n｢𝐌𝐄𝐒𝐒𝐀𝐆𝐄｣ : ${body}\n\n\n｢𝗔𝗗𝗠𝗜𝗡 ｣ ${userName}\n\n•┄┅═════❁🌺❁═════┅┄• আপনি যদি এডমিন এর সঙ্গে কথা বলতে চান। তাইলে অবশ্যই মেসেজের রিপ্লাই দিয়া মেসেজ করো। আমি তা এডিমন এর কাছে পৌঁছে দিবো`;
-      let sendData = adminNotice;
-
-      if (attachments && attachments.length > 0) {
-        sendData = await getAtm(attachments, `${body} \n𝐀𝐃𝐌𝐈𝐍 𝐍𝐎𝐓𝐈𝐅𝐈𝐂𝐀𝐓𝐈𝐎𝐍 \n•┄┅═════❁🌺❁═════┅┄•\n\n 𝐀𝐃𝐌𝐈𝐍 ${userName}\n\n•┄┅═════❁🌺❁═════┅┄• আপনি যদি এডমিন এর সঙ্গে কথা বলতে চান। তাইলে অবশ্যই মেসেজের রিপ্লাই দিয়া মেসেজ করো। আমি তা এডিমন এর কাছে পৌঁছে দিবো.`);
-      }
-
-      api.sendMessage(sendData, handleReply.threadID, (err, info) => {
-        atmDir.forEach(p => { try { fs.unlinkSync(p); } catch(e){} });
-        atmDir = [];
-        if (global.client && global.client.handleReply) {
-          global.client.handleReply.push({
-            name: "noti2",
-            type: "sendnoti",
-            messageID: info.messageID,
-            threadID: threadID
-          });
-        }
-      }, handleReply.messID);
+      // ফেসবুক আইডি সেফ রাখার জন্য ২.৫ সেকেন্ড বিরতি
+      await new Promise(r => setTimeout(r, 2500));
     }
+
+    // ৬. ব্যবহৃত ফাইল ডিলিট করে ক্যাশ খালি করা
+    for (const p of attachmentPaths) {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+
+    return api.sendMessage(`✅ সরাসরি পাঠানো শেষ!\nسফল: ${success}টি গ্রুপে\nব্যর্থ: ${fail}টি গ্রুপে`, threadID, messageID);
   }
 };
-       
