@@ -89,7 +89,7 @@ async function drawPage1(ctx) {
   ctx.fillStyle = "#ff99cc";
   ctx.shadowColor = "#ff33aa";
   ctx.shadowBlur = 25;
-  ctx.fillText("ROCKY CHOWDHURY  ", W / 2, 295); // slightly lower
+  ctx.fillText("JABED ", W / 2, 295); // slightly lower
 
   ctx.font = "italic 20px Arial";
   ctx.fillStyle = "#ff66cc";
@@ -137,7 +137,7 @@ module.exports = {
     name: "info",
     aliases: ["in4", "ownerinfo"],
     version: "1.0",
-    author: "Rocky Chowdhury",
+    author: "JABED",
     countDown: 5,
     role: 0,
     shortDescription: "Owner info",
