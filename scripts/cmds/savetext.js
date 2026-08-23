@@ -6,13 +6,13 @@ const base = "https://tawsif.is-a.dev/save-text/upload";
 module.exports = {
 	config: {
 		name: "savetext",
-		aliases: ["save"],
+		aliases: ["savetext"],
 		author: "Tawsif~",
 		category: "owner",
 		countDown: 5,
 		role: 0,
 		shortDescription: "Capture Screenshots",
-		guide: { en: "save <file name>"
+		guide: { en: "savetext<file name>"
 	}
 },
 onStart: async function({ message, event, args }) {
