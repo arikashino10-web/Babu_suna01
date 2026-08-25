@@ -230,7 +230,7 @@ Object.keys(messages).forEach(time => {
   console.log(chalk.hex("#67e8f9")(`✓ Scheduled → ${time} (BD)`));
 });
 // ====================== SILENCE DETECTOR (Every 1h 30m) ======================
-schedule.scheduleJob("0,30 * * * *", async () => {
+const ONE_HOUR_30 = 90 * 60 * 1000;\nsetInterval(async () => {
   const threads = await getThreadIDs();
   const now = Date.now();
   const ONE_HOUR_30 = 90 * 60 * 1000;
@@ -246,8 +246,8 @@ schedule.scheduleJob("0,30 * * * *", async () => {
       } catch (e) {}
     }
   }
-});
-console.log(chalk.hex("#fbbf24").bold("✓ Silence Detector → Every 30 minutes"));
+}, ONE_HOUR_30);
+console.log(chalk.hex("#fbbf24").bold("✓ Silence Detector → Every 90 minutes"));
 console.log(chalk.hex("#a78bfa").bold("✓ Daily Report → 00:05 AM (BD)"));
 console.log(chalk.hex("#34d399").bold("✓ Main Messages + MP4 → Every 2 hours (BD Time)"));
 },
