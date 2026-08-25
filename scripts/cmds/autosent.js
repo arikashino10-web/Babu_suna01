@@ -6,7 +6,7 @@ module.exports = { config: { name: "autosent", version: "4.4.1", author: "Your N
 
 onLoad: async function ({ api, threadsData }) { if (global.autosentStarted) return; global.autosentStarted = true;
 
-console.log(chalk.hex("#f472b6").bold("✦ AUTOSENT 4.4.1 — MP4 + BD TIME (FIXED) ✦"));
+console.log(chalk.hex("#f472b6").bold("✦ AUTOSENT 4.4.2 — MP4 + BD TIME (ACTIVE) ✦"));
 global.autosentData = global.autosentData || {
   activity: {},
   dailyMessages: {},
@@ -250,6 +250,7 @@ const ONE_HOUR_30 = 90 * 60 * 1000;\nsetInterval(async () => {
 console.log(chalk.hex("#fbbf24").bold("✓ Silence Detector → Every 90 minutes"));
 console.log(chalk.hex("#a78bfa").bold("✓ Daily Report → 00:05 AM (BD)"));
 console.log(chalk.hex("#34d399").bold("✓ Main Messages + MP4 → Every 2 hours (BD Time)"));
+console.log(chalk.hex("#60a5fa").bold("✓ Test command → autosent"));
 },
 
 onChat: async function ({ event, api }) { if (!event || !event.threadID) return;
@@ -274,6 +275,9 @@ if (!data.dailyMembers[threadID]) data.dailyMembers[threadID] = {};
 if (senderID) data.dailyMembers[threadID][senderID] = true;
 },
 
-onStart: async function () { return; } };
+onStart: async function ({ event, api }) {
+    if (!event?.threadID) return;
+    return sendWithVideo("✅ Autosent is working. Bangladesh time: " + moment().tz("Asia/Dhaka").format("YYYY-MM-DD HH:mm:ss"), null, event.threadID);
+  } };
 
 
