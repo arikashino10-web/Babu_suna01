@@ -1,4 +1,4 @@
-const nst { createCanvas, loadImage } = require("canvas");
+const { createCanvas, loadImage } = require("canvas");
 const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
