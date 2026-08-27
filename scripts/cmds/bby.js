@@ -19,8 +19,8 @@
  *   bby list
  *   bby list all [limit]
  *
- * The command uses the Hinata API first, then falls back to the legacy
- * SimSimi-compatible APIs when a provider is unavailable.
+ * The command keeps the original Ullash/Simsimi-trained database as the
+ * primary provider, then falls back to Hinata and Noobs when unavailable.
  */
 
 const axios = require("axios");
@@ -365,6 +365,16 @@ async function getBotResponse(text, attachments = [], senderID = "") {
 
   const response = await firstSuccessful("Baby AI", [
     async () => {
+      const result = await legacyRequest({
+        text: input.toLocaleLowerCase(),
+        senderID,
+        font: 1
+      });
+      const message = extractText(result.data);
+      if (!message) throw new Error("Ullash/Simsimi API returned an empty response");
+      return message;
+    },
+    async () => {
       const result = await hinataRequest("POST", "/api/hinata", {
         text: input,
         style: SETTINGS.defaultStyle,
@@ -372,16 +382,6 @@ async function getBotResponse(text, attachments = [], senderID = "") {
       });
       const message = extractText(result.data);
       if (!message) throw new Error("Hinata returned an empty response");
-      return message;
-    },
-    async () => {
-      const result = await legacyRequest({
-        text: input.toLocaleLowerCase(),
-        senderID,
-        font: 1
-      });
-      const message = extractText(result.data);
-      if (!message) throw new Error("Legacy API returned an empty response");
       return message;
     },
     async () => {
@@ -429,14 +429,14 @@ async function teach(trigger, responses, userID, threadID, isIntro = false) {
   };
 
   return firstSuccessful("Teaching", [
-    async () => hinataRequest("POST", "/api/jan/teach", payload),
     async () => legacyRequest({
       teach: payload.trigger,
       reply: payload.responses,
       senderID: userID,
       threadID,
       ...(isIntro ? { key: "intro" } : {})
-    })
+    }),
+    async () => hinataRequest("POST", "/api/jan/teach", payload)
   ]);
 }
 
@@ -467,14 +467,14 @@ async function removeReply(trigger, index, userID) {
   const normalizedTrigger = lower(trigger);
   if (index !== null && index !== undefined) {
     return firstSuccessful("Removing reply", [
-      async () => hinataRequest("DELETE", "/api/jan/remove", {
-        trigger: normalizedTrigger,
-        index: Number(index)
-      }),
       async () => legacyRequest({
         remove: normalizedTrigger,
         index: Number(index),
         senderID: userID
+      }),
+      async () => hinataRequest("DELETE", "/api/jan/remove", {
+        trigger: normalizedTrigger,
+        index: Number(index)
       })
     ]);
   }
@@ -496,14 +496,14 @@ async function editReply(trigger, replacement, userID) {
   const newResponse = clean(replacement);
 
   return firstSuccessful("Editing reply", [
-    async () => hinataRequest("PUT", "/api/jan/edit", {
-      oldTrigger,
-      newResponse
-    }),
     async () => legacyRequest({
       edit: oldTrigger,
       replace: newResponse,
       senderID: userID
+    }),
+    async () => hinataRequest("PUT", "/api/jan/edit", {
+      oldTrigger,
+      newResponse
     })
   ]);
 }
@@ -511,17 +511,17 @@ async function editReply(trigger, replacement, userID) {
 async function lookupMessage(trigger) {
   const value = lower(trigger);
   return firstSuccessful("Message lookup", [
+    async () => legacyRequest({ list: value }),
     async () => hinataRequest("GET", "/api/jan/msg", null, {
       userMessage: `msg ${value}`
-    }),
-    async () => legacyRequest({ list: value })
+    })
   ]);
 }
 
 async function getList(all = false) {
   return firstSuccessful("Teacher list", [
-    async () => hinataRequest("GET", `/api/jan${all ? "/list/all" : "/list"}`),
-    async () => legacyRequest({ list: "all" })
+    async () => legacyRequest({ list: "all" }),
+    async () => hinataRequest("GET", `/api/jan${all ? "/list/all" : "/list"}`)
   ]);
 }
 
