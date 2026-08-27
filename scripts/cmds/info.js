@@ -128,7 +128,7 @@ async function drawPage1(ctx) {
   ctx.fillStyle = "#e673ff";
   ctx.shadowColor = "#ff99ff";
   ctx.shadowBlur = 25;
-  const obf = String.fromCharCode(169) + " R\ocKyx69x";
+  const obf = String.fromCharCode(169) + "JABED";
   ctx.fillText(obf, W / 2, H - 35);
 }
 
