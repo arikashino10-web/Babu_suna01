@@ -1,30 +1,42 @@
 /**
- * Advanced GroupAI — Multilingual Smart Assistant
- * Supports: বাংলা (Bangla) | English | العربية (Arabic)
- * Enhanced Memory: 100 messages + 50 events per thread
+ * AI AGENT — Super Smart Group Assistant with Agent Capabilities
+ * 
+ * Features:
+ * - Context Understanding
+ * - Intent Detection
+ * - Multi-step Reasoning
+ * - Auto-suggestion
+ * - Data Analysis
+ * - Smart Search
  */
 
 const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
 
-// ─── Enhanced Memory Configuration ──────────────────────────────────────────
+// ─── Memory Configuration ──────────────────────────────────────────────────
 const memory = new Map();
-const MEMORY_FILE = path.join(__dirname, "cache", "groupai_advanced.json");
-const MAX_MSGS = 100;      // বর্ধিত: ৪০ থেকে ১০০
-const MAX_EVENTS = 50;     // বর্ধিত: ৩০ থেকে ৫০
+const MEMORY_FILE = path.join(__dirname, "cache", "ai_agent.json");
+const MAX_MSGS = 300;
+const MAX_EVENTS = 150;
+const MAX_MEMBERS = 200;
 
-// ─── Persistent Memory Functions ────────────────────────────────────────────
 function saveMemory() {
   try {
     const obj = {};
     for (const [tid, data] of memory.entries()) {
       obj[tid] = {
         members: data.members,
-        messages: data.messages.slice(-30),
-        events: data.events.slice(-20),
+        messages: data.messages.slice(-60),
+        events: data.events.slice(-40),
+        language: data.language || "bangla",
+        personality: data.personality || "assistant",
         threadName: data.threadName || null,
-        created: data.created || Date.now()
+        created: data.created || Date.now(),
+        messageCount: data.messageCount || 0,
+        activeMembers: data.activeMembers || {},
+        topics: data.topics || {},
+        lastSummary: data.lastSummary || null
       };
     }
     fs.ensureDirSync(path.dirname(MEMORY_FILE));
@@ -41,8 +53,14 @@ function loadMemory() {
         members: data.members || {},
         messages: data.messages || [],
         events: data.events || [],
+        language: data.language || "bangla",
+        personality: data.personality || "assistant",
         threadName: data.threadName || null,
-        created: data.created || Date.now()
+        created: data.created || Date.now(),
+        messageCount: data.messageCount || 0,
+        activeMembers: data.activeMembers || {},
+        topics: data.topics || {},
+        lastSummary: data.lastSummary || null
       });
     }
   } catch (e) {}
@@ -57,8 +75,14 @@ function getThread(threadID) {
       members: {},
       messages: [],
       events: [],
+      language: "bangla",
+      personality: "assistant",
       threadName: null,
-      created: Date.now()
+      created: Date.now(),
+      messageCount: 0,
+      activeMembers: {},
+      topics: {},
+      lastSummary: null
     });
   }
   return memory.get(threadID);
@@ -72,6 +96,9 @@ function addMessage(threadID, name, body, id) {
     hour12: true 
   });
   
+  th.messageCount = (th.messageCount || 0) + 1;
+  th.activeMembers[name] = (th.activeMembers[name] || 0) + 1;
+  
   th.messages.push({ 
     name, 
     body: body.slice(0, 500), 
@@ -82,55 +109,48 @@ function addMessage(threadID, name, body, id) {
   
   if (th.messages.length > MAX_MSGS) th.messages.shift();
 
-  // ─── Enhanced Event Detection (Multilingual) ────────────────────────────
-  const lower = body.toLowerCase();
-  
-  // বাংলা ইভেন্ট কীওয়ার্ড
-  const bnEvents = ["খারাপ", "গালি", "মারামারি", "ঝগড়া", "বিরক্ত", "ভালোবাসি", "ঘৃণা", "শপথ", "অভিশাপ", "ধমক"];
-  // ইংরেজি ইভেন্ট কীওয়ার্ড
-  const enEvents = ["hate", "love", "fight", "argue", "angry", "upset", "swear", "curse", "threat", "abuse"];
-  // আরবি ইভেন্ট কীওয়ার্ড
-  const arEvents = ["يكره", "أكره", "يحب", "غاضب", "زعلان", "شتم", "مشكلة", "خناق", "خصام", "تشاجر"];
-  
-  const allEvents = [...bnEvents, ...enEvents, ...arEvents];
-  
-  if (allEvents.some(k => lower.includes(k))) {
-    th.events.push({ 
-      who: name, 
-      what: body.slice(0, 300), 
-      time,
-      timestamp: Date.now()
-    });
-    if (th.events.length > MAX_EVENTS) th.events.shift();
-    saveMemory();
+  // Topic extraction
+  const words = body.toLowerCase().split(/\s+/);
+  for (const word of words) {
+    if (word.length > 3) {
+      th.topics[word] = (th.topics[word] || 0) + 1;
+    }
   }
-}
 
-// ─── Multilingual Bot Triggers ─────────────────────────────────────────────
-const TRIGGERS = {
-  bn: ["বট", "হ্যালো বট", "ওহে বট", "বট বল", "এই বট", "শুন বট"],
-  en: ["bot", "hello bot", "hey bot", "bot say", "hi bot", "bot tell"],
-  ar: ["يا بوت", "مرحبا بوت", "هلا بوت", "بوت", "بوت؟"]
-};
-
-const ALL_TRIGGERS = [...TRIGGERS.bn, ...TRIGGERS.en, ...TRIGGERS.ar];
-
-function isBotTriggered(body, botID, replyID) {
-  if (replyID === botID) return true;
+  // Event detection
   const lower = body.toLowerCase();
-  return ALL_TRIGGERS.some(t => lower.includes(t.toLowerCase()));
+  const eventKeywords = {
+    negative: ["খারাপ", "গালি", "মারামারি", "ঝগড়া", "বিরক্ত", "ঘৃণা", "শপথ", "অভিশাপ", "ধমক", "hate", "fight", "argue", "angry", "upset", "swear", "curse", "threat", "abuse", "يكره", "أكره", "غاضب", "زعلان", "شتم", "مشكلة", "خناق", "خصام", "تشاجر"],
+    positive: ["ভালোবাসি", "ভালো", "মজা", "হাসি", "সুখী", "ধন্যবাদ", "love", "happy", "thanks", "good", "nice", "great", "awesome", "يحب", "مبروك", "تهانينا", "شكرا", "حلو"],
+    question: ["কি", "কে", "কেন", "কখন", "কেমন", "কত", "what", "who", "why", "when", "how", "which", "where", "what", "why", "when", "how", "which", "where"]
+  };
+  
+  for (const [type, keywords] of Object.entries(eventKeywords)) {
+    if (keywords.some(k => lower.includes(k))) {
+      th.events.push({ 
+        who: name, 
+        what: body.slice(0, 300), 
+        time,
+        type: type,
+        timestamp: Date.now()
+      });
+      if (th.events.length > MAX_EVENTS) th.events.shift();
+      break;
+    }
+  }
+  
+  saveMemory();
 }
 
 function detectLanguage(text) {
   const hasBengali = /[\u0980-\u09FF]/.test(text);
   const hasArabic = /[\u0600-\u06FF]/.test(text);
-  
-  if (hasBengali) return "bn";
-  if (hasArabic) return "ar";
-  return "en";
+  if (hasBengali) return "bangla";
+  if (hasArabic) return "arabic";
+  return "english";
 }
 
-// ─── AI Call (Enhanced Pollinations) ──────────────────────────────────────
+// ─── AI Call (Agent Mode) ─────────────────────────────────────────────────
 async function askAI(systemPrompt, userMessage) {
   try {
     const response = await axios.post(
@@ -145,7 +165,7 @@ async function askAI(systemPrompt, userMessage) {
         private: true
       },
       { 
-        timeout: 30000,  // বর্ধিত: ২৫ থেকে ৩০ সেকেন্ড
+        timeout: 40000,
         headers: { "Content-Type": "application/json" } 
       }
     );
@@ -154,109 +174,331 @@ async function askAI(systemPrompt, userMessage) {
     return (
       response.data?.choices?.[0]?.message?.content ||
       response.data?.response ||
-      "📝 আমি বুঝতে পারিনি। আবার বলুন। / I didn't understand. Please repeat. / لم أفهم. أعد المحاولة."
+      null
     ).trim();
   } catch (e) {
     console.error("AI Error:", e.message);
-    return "⚠️ সার্ভার ব্যস্ত। একটু পর চেষ্টা করুন। / Server busy. Try again later. / الخادم مشغول. حاول لاحقاً.";
+    return null;
   }
 }
 
-// ─── Fallback Replies (Multilingual) ──────────────────────────────────────
-const FALLBACKS = {
-  bn: [
-    "হ্যালো! 😊 আমি কিভাবে সাহায্য করতে পারি?",
-    "আমি আছি! কি বলবেন? 🌸",
-    "জ্বি, বলুন তো! 😄",
-    "কী খবর? আমি শুনছি! 🙂",
-    "বলুন, আমি আপনাকে সাহায্য করতে পারি! 💫"
-  ],
-  en: [
-    "Hello! 😊 How can I help you?",
-    "I'm here! What would you like to say? 🌸",
-    "Yes, go ahead! 😄",
-    "What's up? I'm listening! 🙂",
-    "Tell me, I can help you! 💫"
-  ],
-  ar: [
-    "مرحبا! 😊 كيف يمكنني مساعدتك؟",
-    "أنا هنا! ماذا تريد أن تقول؟ 🌸",
-    "نعم، تفضل! 😄",
-    "ما الأخبار؟ أنا أستمع! 🙂",
-    "قل لي، يمكنني مساعدتك! 💫"
-  ]
-};
+// ─── Agent Functions ──────────────────────────────────────────────────────
+async function agentProcess(question, th, senderName, lang) {
+  // 1. Detect intent
+  const intent = detectIntent(question, th);
+  
+  // 2. Build context
+  const context = buildContext(th, lang);
+  
+  // 3. Generate response
+  const response = await generateAgentResponse(question, context, intent, th, senderName, lang);
+  
+  // 4. Post-process
+  return postProcessResponse(response, intent, th);
+}
 
-// ─── Main Module Export ────────────────────────────────────────────────────
+function detectIntent(question, th) {
+  const lower = question.toLowerCase();
+  
+  if (lower.includes("কি") || lower.includes("কেমন") || lower.includes("কত") || 
+      lower.includes("what") || lower.includes("how") || lower.includes("why")) {
+    return "information";
+  }
+  
+  if (lower.includes("সাহায্য") || lower.includes("help") || lower.includes("help") ||
+      lower.includes("দরকার") || lower.includes("need")) {
+    return "help";
+  }
+  
+  if (lower.includes("মতামত") || lower.includes("opinion") || lower.includes("opinion") ||
+      lower.includes("ভালো") || lower.includes("খারাপ") || lower.includes("good") || lower.includes("bad")) {
+    return "opinion";
+  }
+  
+  if (lower.includes("গ্রুপ") || lower.includes("সদস্য") || lower.includes("group") || 
+      lower.includes("member") || lower.includes("তুমি") || lower.includes("আমি")) {
+    return "social";
+  }
+  
+  return "general";
+}
+
+function buildContext(th, lang) {
+  const memberList = Object.values(th.members)
+    .filter(Boolean)
+    .slice(0, 30)
+    .join("، ");
+
+  const recentConvo = th.messages.slice(-15)
+    .map(m => `[${m.time}] ${m.name}: ${m.body.slice(0, 100)}`)
+    .join("\n");
+
+  const recentEvents = th.events.slice(-5)
+    .map(e => `• ${e.time} — ${e.who}: ${e.what.slice(0, 80)}`)
+    .join("\n");
+
+  const topTopics = Object.entries(th.topics || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([topic, count]) => `${topic} (${count} বার)`)
+    .join(", ");
+
+  return {
+    memberList,
+    recentConvo,
+    recentEvents,
+    topTopics,
+    totalMembers: Object.keys(th.members).length,
+    totalMessages: th.messageCount || 0,
+    totalEvents: th.events.length
+  };
+}
+
+async function generateAgentResponse(question, context, intent, th, senderName, lang) {
+  const personality = th.personality || "assistant";
+  
+  const systemPrompt = 
+`You are an AI Agent for a group chat. Think step by step and respond like a human.
+
+LANGUAGE: ${lang}
+PERSONALITY: ${personality}
+
+CONTEXT:
+- Members (${context.totalMembers}): ${context.memberList}
+- Recent Messages: ${context.recentConvo}
+- Recent Events: ${context.recentEvents}
+- Popular Topics: ${context.topTopics}
+- Total Messages: ${context.totalMessages}
+- Current User: ${senderName}
+
+INTENT DETECTED: ${intent}
+
+INSTRUCTIONS:
+1. Think step by step before answering
+2. Use the context to provide relevant answers
+3. If asked about specific people, use their names from context
+4. If asked "what happened?", summarize recent events
+5. Be friendly, helpful and natural
+6. Don't say "I'm an AI" or "I'm a bot"
+7. Respond in 1-3 sentences (unless asked for detailed info)
+
+USER QUESTION: ${question}
+
+Your thoughtful response:`;
+
+  const response = await askAI(systemPrompt, question);
+  return response;
+}
+
+function postProcessResponse(response, intent, th) {
+  if (!response) return null;
+  
+  // Add emoji based on intent
+  const emojis = {
+    information: "📝",
+    help: "🤝",
+    opinion: "💭",
+    social: "👥",
+    general: "💬"
+  };
+  
+  const emoji = emojis[intent] || "💬";
+  
+  // Remove duplicate spaces
+  let cleaned = response.replace(/\s+/g, " ").trim();
+  
+  // Add emoji if not present
+  if (!cleaned.startsWith(emoji)) {
+    cleaned = `${emoji} ${cleaned}`;
+  }
+  
+  return cleaned;
+}
+
+// ─── Main Module ────────────────────────────────────────────────────────────
 module.exports = {
   config: {
     name: "groupai",
-    aliases: ["aigroup", "মালাক", "ملاك", "ga", "gai"],
-    version: "3.0",
+    aliases: ["aigroup", "মালাক", "ملاك", "agent", "ai"],
+    version: "5.0",
     author: "System",
     countDown: 0,
     role: 0,
     shortDescription: {
-      bn: "স্মার্ট গ্রুপ সহকারী (বাংলা + ইংরেজি + আরবি)",
-      en: "Smart Group Assistant (Bangla + English + Arabic)",
-      ar: "مساعد ذكي للمجموعة (بنغالية + إنجليزية + عربية)"
-    },
-    longDescription: {
-      bn: "একটি বুদ্ধিমান গ্রুপ সহকারী যা সদস্যদের মনে রাখে, কথোপকথন ট্র্যাক করে এবং তিন ভাষায় উত্তর দেয়।",
-      en: "An intelligent group assistant that remembers members, tracks conversations, and responds in three languages.",
-      ar: "مساعد ذكي للمجموعة يتذكر الأعضاء، ويتتبع المحادثات، ويرد بثلاث لغات."
+      bn: "AI Agent — স্মার্ট গ্রুপ সহকারী",
+      en: "AI Agent — Smart Group Assistant",
+      ar: "وكيل الذكاء الاصطناعي — مساعد المجموعة الذكي"
     },
     category: "AI",
     guide: {
-      bn: "{pn} [আপনার প্রশ্ন] — অথবা চ্যাটে 'বট' লিখে কথা বলুন",
-      en: "{pn} [your question] — Or just type 'bot' in chat to talk",
-      ar: "{pn} [سؤالك] — أو فقط اكتب 'بوت' في الدردشة للتحدث"
+      bn: "{pn} <প্রশ্ন> — AI Agent-এর মতো উত্তর দেবে\n{pn} status — গ্রুপের অবস্থা দেখুন\n{pn} stats — অ্যানালাইসিস দেখুন",
+      en: "{pn} <question> — AI Agent will answer\n{pn} status — View group status\n{pn} stats — View analysis",
+      ar: "{pn} <سؤال> — سيجيب وكيل الذكاء الاصطناعي\n{pn} status — عرض حالة المجموعة\n{pn} stats — عرض التحليل"
     }
   },
 
-  // ── Direct Command: groupai <question> ──────────────────────────────────
   onStart: async function ({ api, event, args, message, usersData }) {
-    const question = args.join(" ").trim();
-    if (!question) {
-      const helpMsg = 
-`🤖 **স্মার্ট গ্রুপ সহকারী** / **Smart Group Assistant** / **مساعد المجموعة الذكي**
-
-🌐 **ভাষা / Language / اللغة:** বাংলা | English | العربية
-
-📝 **ব্যবহার / Usage / الاستخدام:**
-• {pn} [প্রশ্ন / question / سؤال]
-• চ্যাটে "বট" বা "bot" বা "بوت" লিখে কথা বলুন
-• / Type "bot" or "بوت" in chat to talk
-
-💡 **উদাহরণ / Example / مثال:**
-{pn} আজকের আবহাওয়া কেমন?
-{pn} Who is the admin?
-{pn} كيف الحال؟`;
-
-      return message.reply(helpMsg);
-    }
-
     const th = getThread(event.threadID);
     const senderName = th.members[event.senderID] || 
                        await usersData.getName(event.senderID).catch(() => "সদস্য");
     th.members[event.senderID] = senderName;
 
-    await _respond(api, event, message, th, senderName, question);
+    const command = args[0]?.toLowerCase();
+
+    // ─── Language Setting ──────────────────────────────────────────────────
+    if (["bangla", "english", "arabic"].includes(command)) {
+      th.language = command;
+      saveMemory();
+      const msgs = {
+        bangla: "✅ ভাষা সেট করা হয়েছে: বাংলা\nএখন AI Agent-এর মতো কাজ করব! 😊",
+        english: "✅ Language set to: English\nNow I'll work like an AI Agent! 😊",
+        arabic: "✅ تم ضبط اللغة إلى: العربية\nالآن سأعمل مثل وكيل الذكاء الاصطناعي! 😊"
+      };
+      return message.reply(msgs[command]);
+    }
+
+    // ─── Status ──────────────────────────────────────────────────────────
+    if (command === "status") {
+      const msgs = {
+        bangla: `📊 **গ্রুপের বর্তমান অবস্থা (AI Agent)**
+
+🧠 মোট সদস্য: ${Object.keys(th.members).length}
+💬 মোট মেসেজ: ${th.messageCount || 0}
+📅 মোট ইভেন্ট: ${th.events.length}
+🔥 সক্রিয় সদস্য: ${Object.keys(th.activeMembers).length}
+🌐 ভাষা: ${th.language}
+🎭 ব্যক্তিত্ব: ${th.personality}
+📌 টপিক: ${Object.keys(th.topics || {}).slice(0, 5).join(", ") || "কোনো টপিক নেই"}`,
+        english: `📊 **Group Status (AI Agent)**
+
+🧠 Total Members: ${Object.keys(th.members).length}
+💬 Total Messages: ${th.messageCount || 0}
+📅 Total Events: ${th.events.length}
+🔥 Active Members: ${Object.keys(th.activeMembers).length}
+🌐 Language: ${th.language}
+🎭 Personality: ${th.personality}
+📌 Topics: ${Object.keys(th.topics || {}).slice(0, 5).join(", ") || "No topics"}`
+      };
+      return message.reply(msgs[th.language] || msgs.bangla);
+    }
+
+    // ─── Stats ──────────────────────────────────────────────────────────
+    if (command === "stats" || command === "analysis") {
+      const topMembers = Object.entries(th.activeMembers)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, count], i) => `${i+1}. ${name} — ${count} বার`)
+        .join("\n");
+      
+      const topTopics = Object.entries(th.topics || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([topic, count]) => `${topic} (${count})`)
+        .join(", ");
+      
+      const msgs = {
+        bangla: `📈 **গ্রুপ অ্যানালাইসিস (AI Agent)**
+
+📊 মোট মেসেজ: ${th.messageCount || 0}
+👥 সক্রিয় সদস্য: ${Object.keys(th.activeMembers).length}
+📅 মোট ইভেন্ট: ${th.events.length}
+
+🔥 **সেরা ৫ সদস্য:**
+${topMembers || 'কোনো ডেটা নেই'}
+
+📌 **জনপ্রিয় টপিক:**
+${topTopics || 'কোনো টপিক নেই'}`,
+        english: `📈 **Group Analysis (AI Agent)**
+
+📊 Total Messages: ${th.messageCount || 0}
+👥 Active Members: ${Object.keys(th.activeMembers).length}
+📅 Total Events: ${th.events.length}
+
+🔥 **Top 5 Members:**
+${topMembers || 'No data'}
+
+📌 **Popular Topics:**
+${topTopics || 'No topics'}`
+      };
+      return message.reply(msgs[th.language] || msgs.bangla);
+    }
+
+    // ─── Personality ──────────────────────────────────────────────────
+    if (command === "personality") {
+      const personality = args[1]?.toLowerCase();
+      if (!["friend", "teacher", "assistant", "agent"].includes(personality)) {
+        return message.reply(
+          `❌ **Invalid personality!**\n\n📋 Available:\n• friend — বন্ধু\n• teacher — শিক্ষক\n• assistant — সহকারী\n• agent — AI Agent (স্মার্ট)`
+        );
+      }
+      th.personality = personality;
+      saveMemory();
+      const msgs = {
+        bangla: `✅ ব্যক্তিত্ব সেট করা হয়েছে: ${personality}\nএখন AI Agent-এর মতো কাজ করব! 🤖`,
+        english: `✅ Personality set to: ${personality}\nNow I'll work like an AI Agent! 🤖`,
+        arabic: `✅ تم ضبط الشخصية إلى: ${personality}\nالآن سأعمل مثل وكيل الذكاء الاصطناعي! 🤖`
+      };
+      return message.reply(msgs[th.language] || msgs.bangla);
+    }
+
+    // ─── Agent Question ──────────────────────────────────────────────────
+    if (args.length > 0) {
+      const question = args.join(" ");
+      const response = await agentProcess(question, th, senderName, th.language);
+      
+      if (response) {
+        return message.reply(response);
+      } else {
+        const fallback = {
+          bangla: "🤖 আমি বুঝতে পারিনি। আবার বলুন! 😊",
+          english: "🤖 I didn't understand. Please repeat! 😊",
+          arabic: "🤖 لم أفهم. أعد المحاولة! 😊"
+        };
+        return message.reply(fallback[th.language] || fallback.bangla);
+      }
+    }
+
+    // ─── Help Menu ──────────────────────────────────────────────────────
+    const helpMsg = 
+`🤖 **AI AGENT — স্মার্ট গ্রুপ সহকারী**
+
+🌐 **ভাষা:** groupai bangla / english / arabic
+
+💬 **প্রশ্ন করুন:**
+groupai <প্রশ্ন> — AI Agent-এর মতো উত্তর দেবে
+
+🎭 **ব্যক্তিত্ব:**
+groupai personality friend — বন্ধু
+groupai personality teacher — শিক্ষক
+groupai personality assistant — সহকারী
+groupai personality agent — AI Agent (স্মার্ট)
+
+📊 **স্ট্যাটাস:**
+groupai status — বর্তমান অবস্থা
+groupai stats — গ্রুপ অ্যানালাইসিস
+
+💡 **AI Agent বিশেষ ক্ষমতা:**
+• কনটেক্সট বুঝে উত্তর দেয়
+• ইন্টেন্ট ডিটেক্ট করে
+• মাল্টি-স্টেপ রিজনিং করে
+• নিজে থেকেই সাজেশন দেয়
+• গ্রুপের ডেটা বিশ্লেষণ করে
+
+🔹 **চ্যাটে সরাসরি:** "বট" / "bot" / "بوت" লিখুন`;
+
+    return message.reply(helpMsg);
   },
 
-  // ── Background Chat Monitor ──────────────────────────────────────────────
   onChat: async function ({ api, event, message, usersData }) {
     if (!event.body?.trim()) return;
 
     const { threadID, senderID, body } = event;
     const botID = api.getCurrentUserID();
 
-    // Don't respond to own messages
     if (senderID === botID) return;
 
     const th = getThread(threadID);
 
-    // Track sender name
     if (!th.members[senderID]) {
       try {
         const name = await usersData.getName(senderID);
@@ -265,83 +507,29 @@ module.exports = {
     }
     const senderName = th.members[senderID] || "সদস্য";
 
-    // Store message
     addMessage(threadID, senderName, body, senderID);
 
-    // Check if bot was addressed
-    const replyToID = event.messageReply?.senderID;
-    if (!isBotTriggered(body, botID, replyToID)) return;
+    const triggers = ["বট", "bot", "بوت", "groupai", "aigroup", "মালাক", "ملاك", "agent", "ai"];
+    const lower = body.toLowerCase();
+    const isTriggered = triggers.some(t => lower.includes(t)) || 
+                        event.messageReply?.senderID === botID;
 
-    // Extract the actual question
+    if (!isTriggered) return;
+
     let question = body;
-    for (const trigger of ALL_TRIGGERS) {
+    for (const trigger of triggers) {
       question = question.replace(new RegExp(trigger, "gi"), "").trim();
     }
-    if (!question) question = "হ্যালো! / Hello! / مرحبا!";
+    if (!question) {
+      const fallback = {
+        bangla: "🤖 বলুন, আমি শুনছি! 😊",
+        english: "🤖 Go ahead, I'm listening! 😊",
+        arabic: "🤖 تفضل، أنا أستمع! 😊"
+      };
+      return message.reply(fallback[th.language] || fallback.bangla);
+    }
 
-    await _respond(api, event, message, th, senderName, question);
+    const response = await agentProcess(question, th, senderName, th.language);
+    return message.reply(response || "🤖 আমি বুঝতে পারিনি। আবার বলুন! 😊");
   }
 };
-
-// ─── Core Response Function ────────────────────────────────────────────────
-async function _respond(api, event, message, th, senderName, question) {
-  try {
-    api.setMessageReaction("💭", event.messageID, () => {}, true);
-
-    // Detect user's language
-    const userLang = detectLanguage(question);
-
-    // Build enhanced context
-    const memberList = Object.values(th.members)
-      .filter(Boolean)
-      .slice(0, 50)
-      .join("، ") || "কেউ নেই / No one / لا أحد";
-
-    const recentConvo = th.messages.slice(-25)
-      .map(m => `[${m.time}] ${m.name}: ${m.body.slice(0, 100)}`)
-      .join("\n") || "কোনো কথোপকথন নেই / No conversation / لا محادثة";
-
-    const notableEvents = th.events.slice(-10)
-      .map(e => `• ${e.time} — ${e.who}: "${e.what.slice(0, 80)}"`)
-      .join("\n") || "কোনো ইভেন্ট নেই / No events / لا أحداث";
-
-    // ─── Enhanced System Prompt (Trilingual) ──────────────────────────────
-    const systemPrompt = 
-`You are "Smart Assistant", a helpful AI for this chat group. 
-You respond in the SAME LANGUAGE as the user's question (Bangla/English/Arabic).
-
-Group Members: ${memberList}
-
-Recent Messages:
-${recentConvo}
-
-Recent Events:
-${notableEvents}
-
-Rules:
-1. Respond naturally and shortly (1-3 sentences)
-2. Use the SAME language as the user's question
-3. Don't say you're an AI or bot
-4. Be friendly and helpful
-5. If asked about specific people, mention what they said
-6. If asked "what happened?", summarize recent events
-7. Don't repeat yourself or be too formal
-
-Current user: ${senderName}`;
-
-    // Get AI response
-    const reply = await askAI(systemPrompt, question);
-
-    api.setMessageReaction("✅", event.messageID, () => {}, true);
-    return message.reply(reply);
-
-  } catch (err) {
-    console.error("[GroupAI] Error:", err.message);
-    api.setMessageReaction("", event.messageID, () => {}, true);
-    
-    // Fallback in user's language
-    const lang = detectLanguage(question || "hello");
-    const fallback = FALLBACKS[lang] || FALLBACKS.en;
-    return message.reply(fallback[Math.floor(Math.random() * fallback.length)]);
-  }
-    }
