@@ -1,332 +1,327 @@
-// Fix for: process.stderr.clearLine is not a function
-if (typeof process.stderr.clearLine !== "function") {
-  process.stderr.clearLine = () => {};
-  process.stderr.cursorTo = () => {};
-  process.stderr.moveCursor = () => {};
-}
-if (typeof process.stdout.clearLine !== "function") {
-  process.stdout.clearLine = () => {};
-  process.stdout.cursorTo = () => {};
-  process.stdout.moveCursor = () => {};
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
+
+const WHITELIST_PATH = path.join(__dirname, "autosent_whitelist.json");
+
+// ========== Whitelist ==========
+let WHITELIST = [
+  // এখানে চাইলে আগে থেকে Thread ID দিতে পারো
+  // "1000xxxxxxxxxxxx",
+];
+
+function loadWhitelist() {
+  try {
+    if (fs.existsSync(WHITELIST_PATH)) {
+      WHITELIST = JSON.parse(fs.readFileSync(WHITELIST_PATH, "utf8"));
+    } else {
+      saveWhitelist();
+    }
+  } catch (e) {
+    WHITELIST = [];
+  }
 }
 
-const schedule = require("node-schedule");
-const moment = require("moment-timezone");
-const chalk = require("chalk");
+function saveWhitelist() {
+  try {
+    fs.writeFileSync(WHITELIST_PATH, JSON.stringify(WHITELIST, null, 2));
+  } catch (e) {}
+}
+
+loadWhitelist();
 
 module.exports = {
   config: {
     name: "autosent",
-    version: "4.4.2",
-    author: "Your Name",
-    countDown: 5,
+    version: "21.2.0",
+    author: "System",
+    countDown: 0,
     role: 0,
-    description: {
-      en: "24-hour intelligent group companion with MP4 videos (BD Time)",
-      vi: "Hệ thống tin nhắn thông minh 24 giờ kèm video"
-    },
-    category: "system",
-    guide: {
-      en: "Automatic system. No command required."
-    }
+    category: "system"
   },
 
-  // এই ফাংশনটা অবশ্যই থাকতে হবে (তোমার বট এটা চায়)
-  onStart: async function () {
-    return;
+  onStart: async function ({ api, event, args }) {
+    const threadID = event.threadID;
+    const input = (args[0] || "").toLowerCase();
+
+    // ===== HELP =====
+    if (input === "help" || input === "") {
+      return api.sendMessage(
+`🤖 𝗔𝗨𝗧𝗢𝗦𝗘𝗡𝗧 𝗛𝗘𝗟𝗣
+━━━━━━━━━━━━━━━━━━
+📌 Available Commands:
+
+• .autosent help
+  → সব কমান্ড দেখাবে
+
+• .autosent add
+  → বর্তমান গ্রুপ Whitelist-এ যোগ করবে
+
+• .autosent remove
+  → বর্তমান গ্রুপ Whitelist থেকে বাদ দিবে
+
+• .autosent list
+  → Whitelist-এ থাকা সব গ্রুপ দেখাবে
+
+• .autosent test
+  → শুধু Whitelist গ্রুপে টেস্ট মেসেজ + ভিডিও পাঠাবে
+
+━━━━━━━━━━━━━━━━━━
+⚙️ System Features:
+• প্রতি ২ ঘণ্টায় অটো মেসেজ + ভিডিও
+• Daily Report (00:05 BD Time)
+• Silence Detector (৯০ মিনিট নীরব থাকলে)
+• শুধু Whitelist গ্রুপেই মেসেজ যায়
+
+📋 বর্তমান Whitelist: ${WHITELIST.length}টি গ্রুপ
+━━━━━━━━━━━━━━━━━━`,
+        threadID
+      );
+    }
+
+    // ===== ADD =====
+    if (input === "add") {
+      if (WHITELIST.includes(threadID)) {
+        return api.sendMessage("⚠️ এই গ্রুপ আগে থেকেই Whitelist-এ আছে।", threadID);
+      }
+      WHITELIST.push(threadID);
+      saveWhitelist();
+      return api.sendMessage(`✅ এই গ্রুপ Whitelist-এ যোগ করা হয়েছে।\nThread ID: ${threadID}`, threadID);
+    }
+
+    // ===== REMOVE =====
+    if (input === "remove") {
+      if (!WHITELIST.includes(threadID)) {
+        return api.sendMessage("⚠️ এই গ্রুপ Whitelist-এ নেই।", threadID);
+      }
+      WHITELIST = WHITELIST.filter(id => id !== threadID);
+      saveWhitelist();
+      return api.sendMessage(`🗑️ এই গ্রুপ Whitelist থেকে বাদ দেওয়া হয়েছে।`, threadID);
+    }
+
+    // ===== LIST =====
+    if (input === "list") {
+      if (WHITELIST.length === 0) {
+        return api.sendMessage("📭 Whitelist খালি।\nযোগ করতে: .autosent add", threadID);
+      }
+      return api.sendMessage(
+        `📋 Whitelist (${WHITELIST.length}টি গ্রুপ):\n\n` +
+        WHITELIST.map((id, i) => `${i + 1}. ${id}`).join("\n"),
+        threadID
+      );
+    }
+
+    // ===== TEST =====
+    if (input === "test") {
+      if (WHITELIST.length === 0) {
+        return api.sendMessage("⚠️ আগে গ্রুপ Whitelist-এ যোগ করুন।\nকমান্ড: .autosent add", threadID);
+      }
+      api.sendMessage("⏳ শুধু Whitelist গ্রুপে টেস্ট পাঠানো হচ্ছে...", threadID);
+      for (const id of WHITELIST) {
+        await sendV(api, id, "✅ টেস্ট সফল!\n━━━━━━━━━━━━\n✅ Test Successful!", "https://files.catbox.moe/6in51c.mp4");
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      return;
+    }
+
+    // অজানা কমান্ড
+    return api.sendMessage("❌ অজানা কমান্ড!\nসব কমান্ড দেখতে লিখুন: .autosent help", threadID);
   },
 
   onLoad: async function ({ api }) {
-    if (global.autosentStarted) return;
-    global.autosentStarted = true;
-
-    console.log(chalk.hex("#f472b6").bold("✦ AUTOSENT 4.4.2 — GoatBot V2 Style ✦"));
+    if (global.autoInterval) clearInterval(global.autoInterval);
+    console.log("=== [AUTOSENT] Whitelist System সচল হয়েছে ===");
 
     global.autosentData = global.autosentData || {
       activity: {},
       dailyMessages: {},
-      dailyMembers: {},
-      recentMain: {}
+      lastSent: "",
+      lastReport: "",
+      msgIndex: {},
+      silenceIndex: 0
     };
 
-    const data = global.autosentData;
-
-    // ========== VIDEO LINKS ==========
-    const videos = {
-      morning: "https://files.catbox.moe/3b5km4.mp4",
-      afternoon: "https://files.catbox.moe/6in51c.mp4",
-      evening: "https://files.catbox.moe/1wil0m.mp4",
-      night: "https://files.catbox.moe/f3h67p.mp4"
-    };
-
-    // ========== MESSAGES ==========
-    const messages = {
+    // ========== ১২টি সময়ের মেসেজ ==========
+    const schedule = {
       "00:00": {
         texts: [
-          "🌙 রাত ১২টা বাজে।\nআজকের দিনটা এখানেই শেষ।\nযা খারাপ হয়েছে সেটা আজকের সাথেই রেখে দাও।\nকাল আবার নতুন একটা দিন। ❤️",
-          "🕛 MIDNIGHT CHECK\n\nসবাইকে একটা কথা—\nআজকের ভুলগুলো নিয়ে ঘুমাতে যেও না।\nকাল আবার নতুন করে শুরু করা যাবে। 🌙",
-          "🌌 রাত অনেক হয়েছে।\n\nহয়তো কেউ ঘুমিয়ে গেছে,\nকেউ এখনো online,\nআর কেউ নিজের চিন্তার সাথে যুদ্ধ করছে।\n\nGood Night. ❤️"
+          "🌙 রাত ১২টা বাজে।\nআজকের দিনটা এখানেই শেষ।\nযা খারাপ হয়েছে সেটা আজকের সাথেই রেখে দাও।\nকাল আবার নতুন একটা দিন। ❤️\n━━━━━━━━━━━━\n🌙 It's 12 AM.\nToday ends here.\nLeave the bad things with today.\nTomorrow is a new day. ❤️",
+          "🕛 MIDNIGHT CHECK\n\nসবাইকে একটা কথা—\nআজকের ভুলগুলো নিয়ে ঘুমাতে যেও না।\nকাল আবার নতুন করে শুরু করা যাবে। 🌙\n━━━━━━━━━━━━\n🕛 MIDNIGHT CHECK\n\nOne thing for everyone—\nDon't sleep with today's mistakes.\nYou can start fresh tomorrow. 🌙",
+          "🌌 রাত অনেক হয়েছে।\n\nহয়তো কেউ ঘুমিয়ে গেছে,\nকেউ এখনো online,\nআর কেউ নিজের চিন্তার সাথে যুদ্ধ করছে।\n\nGood Night. ❤️\n━━━━━━━━━━━━\n🌌 It's late at night.\n\nMaybe someone is sleeping,\nsomeone is still online,\nand someone is fighting with their thoughts.\n\nGood Night. ❤️"
         ],
-        video: videos.night
+        vid: "https://files.catbox.moe/dg3wxa.mp4"
       },
       "02:00": {
         texts: [
-          "🌙 রাত ২টা!\n\nএখনো জেগে আছো?\nঘুম তোমাকে block করেছে নাকি তুমি ঘুমকে block করেছো? 😂",
-          "👀 2:00 AM\n\nএই সময় যারা জেগে থাকে,\nতাদের দুইটা কারণ থাকে—\nঅতিরিক্ত চিন্তা অথবা অতিরিক্ত scrolling. 😂",
-          "🌌 রাত ২টা বাজে।\n\nচোখ দুটোকে একটু rest দাও।\nFacebook পৃথিবী তোমাকে ছাড়া এক ঘণ্টা চলবে। 😂"
+          "🌙 রাত ২টা!\n\nএখনো জেগে আছো?\nঘুম তোমাকে block করেছে নাকি তুমি ঘুমকে block করেছো? 😂\n━━━━━━━━━━━━\n🌙 It's 2 AM!\n\nStill awake?\nDid sleep block you or did you block sleep? 😂",
+          "👀 2:00 AM\n\nএই সময় যারা জেগে থাকে,\nতাদের দুইটা কারণ থাকে—\nঅতিরিক্ত চিন্তা অথবা অতিরিক্ত scrolling. 😂\n━━━━━━━━━━━━\n👀 2:00 AM\n\nThose who stay awake at this time\nusually have two reasons—\ntoo much overthinking or too much scrolling. 😂",
+          "🌌 রাত ২টা বাজে।\n\nচোখ দুটোকে একটু rest দাও।\nFacebook পৃথিবী তোমাকে ছাড়া এক ঘণ্টা চলবে। 😂\n━━━━━━━━━━━━\n🌌 It's 2 AM.\n\nGive your eyes some rest.\nThe Facebook world will run without you for an hour. 😂"
         ],
-        video: videos.night
+        vid: "https://files.catbox.moe/f3h67p.mp4"
       },
       "04:00": {
         texts: [
-          "🌅 ভোর ৪টা...\n\nআর কিছুক্ষণ পরেই সকাল।\nরাত যতই দীর্ঘ হোক,\nশেষে সকাল আসবেই। ❤️",
-          "🌌 4:00 AM\n\nপৃথিবী এখন অনেক শান্ত।\nনিজের জন্য কয়েক মিনিট রাখো।",
-          "🕌 ভোরের সময় কাছাকাছি।\n\nনিজেকে একটু শান্ত করো।\nনতুন দিনের জন্য প্রস্তুত হও।"
+          "🌅 ভোর ৪টা...\n\nআর কিছুক্ষণ পরেই সকাল।\nরাত যতই দীর্ঘ হোক,\nশেষে সকাল আসবেই। ❤️\n━━━━━━━━━━━━\n🌅 It's 4 AM...\n\nMorning is coming soon.\nNo matter how long the night is,\nmorning will always arrive. ❤️",
+          "🌌 4:00 AM\n\nপৃথিবী এখন অনেক শান্ত।\nনিজের জন্য কয়েক মিনিট রাখো।\n━━━━━━━━━━━━\n🌌 4:00 AM\n\nThe world is very quiet now.\nKeep a few minutes for yourself.",
+          "🕌 ভোরের সময় কাছাকাছি।\n\nনিজেকে একটু শান্ত করো।\nনতুন দিনের জন্য প্রস্তুত হও।\n━━━━━━━━━━━━\n🕌 Dawn is near.\n\nCalm yourself a little.\nGet ready for a new day."
         ],
-        video: videos.night
+        vid: "https://files.catbox.moe/wi2y1i.mp4"
       },
       "06:00": {
         texts: [
-          "☀️ GOOD MORNING!\n\nনতুন সকাল, নতুন সুযোগ।\nআজকের দিনটা গতকালের চেয়ে একটু ভালো করার চেষ্টা করো। ❤️",
-          "🌞 সকাল ৬টা!\n\nউঠে পড়ো।\nএক গ্লাস পানি খাও।\nতারপর দিন শুরু করো।",
-          "☀️ MORNING SYSTEM ACTIVATED!\n\nআজকের Mission:\nনিজেকে গতকালের চেয়ে ১% better করা। 🔥"
+          "☀️ GOOD MORNING!\n\nনতুন সকাল, নতুন সুযোগ।\nআজকের দিনটা গতকালের চেয়ে একটু ভালো করার চেষ্টা করো। ❤️\n━━━━━━━━━━━━\n☀️ GOOD MORNING!\n\nNew morning, new chance.\nTry to make today a little better than yesterday. ❤️",
+          "🌞 সকাল ৬টা!\n\nউঠে পড়ো।\nএক গ্লাস পানি খাও।\nতারপর দিন শুরু করো।\n━━━━━━━━━━━━\n🌞 It's 6 AM!\n\nWake up.\nDrink a glass of water.\nThen start your day.",
+          "☀️ MORNING SYSTEM ACTIVATED!\n\nআজকের Mission:\nনিজেকে গতকালের চেয়ে ১% better করা। 🔥\n━━━━━━━━━━━━\n☀️ MORNING SYSTEM ACTIVATED!\n\nToday's Mission:\nMake yourself 1% better than yesterday. 🔥"
         ],
-        video: videos.morning
+        vid: "https://files.catbox.moe/3b5km4.mp4"
       },
       "08:00": {
         texts: [
-          "🍳 সকাল ৮টা!\n\nনাস্তা করেছো?\nনাকি আবার মোবাইলটাই breakfast হয়ে গেছে? 😂",
-          "☀️ 8:00 AM\n\nযে কাজটা অনেকদিন ধরে পিছিয়ে দিচ্ছো,\nআজ সেটার শুরুটা করে ফেলো।",
-          "🥐 BREAKFAST CHECK!\n\nআগে নাস্তা করো,\nতারপর দুনিয়া জয় করতে বের হও। 😂🔥"
+          "🍳 সকাল ৮টা!\n\nনাস্তা করেছো?\nনাকি আবার মোবাইলটাই breakfast হয়ে গেছে? 😂\n━━━━━━━━━━━━\n🍳 It's 8 AM!\n\nHad breakfast?\nOr has the phone become your breakfast again? 😂",
+          "☀️ 8:00 AM\n\nযে কাজটা অনেকদিন ধরে পিছিয়ে দিচ্ছো,\nআজ সেটার শুরুটা করে ফেলো।\n━━━━━━━━━━━━\n☀️ 8:00 AM\n\nThat work you've been postponing for days—\nstart it today.",
+          "🥐 BREAKFAST CHECK!\n\nআগে নাস্তা করো,\nতারপর দুনিয়া জয় করতে বের হও। 😂🔥\n━━━━━━━━━━━━\n🥐 BREAKFAST CHECK!\n\nEat first,\nthen go conquer the world. 😂🔥"
         ],
-        video: videos.morning
+        vid: "https://files.catbox.moe/qlp4ap.mp4"
       },
       "10:00": {
         texts: [
-          "🧠 সকাল ১০টা।\n\nঘড়ি কিন্তু থেমে নেই।\nসময়কে কাজে লাগাও।",
-          "⚡ 10:00 AM\n\nআজকের সবচেয়ে গুরুত্বপূর্ণ কাজটা এখনই শুরু করো।",
-          "👀 ছোট্ট reminder:\n\nতোমার future version তোমার আজকের decision-এর উপর নির্ভর করছে।"
+          "🧠 সকাল ১০টা।\n\nঘড়ি কিন্তু থেমে নেই।\nসময়কে কাজে লাগাও।\n━━━━━━━━━━━━\n🧠 It's 10 AM.\n\nThe clock isn't stopping.\nUse your time well.",
+          "⚡ 10:00 AM\n\nআজকের সবচেয়ে গুরুত্বপূর্ণ কাজটা এখনই শুরু করো।\n━━━━━━━━━━━━\n⚡ 10:00 AM\n\nStart today's most important task right now.",
+          "👀 ছোট্ট reminder:\n\nতোমার future version তোমার আজকের decision-এর উপর নির্ভর করছে।\n━━━━━━━━━━━━\n👀 Small reminder:\n\nYour future version depends on today's decisions."
         ],
-        video: videos.morning
+        vid: "https://files.catbox.moe/td7ps7.mp4"
       },
       "12:00": {
         texts: [
-          "🌤️ দুপুর ১২টা!\n\nঅর্ধেক দিন প্রায় শেষ।\nআজ এখন পর্যন্ত কী করেছো?\nনিজেকে ১০-এর মধ্যে কত দেবে? 👀",
-          "🥤 MIDDAY CHECK\n\nপানি খাও।\nচোখকে একটু বিশ্রাম দাও।",
-          "☀️ GOOD AFTERNOON!\n\nসকালের plan নষ্ট হলেও সমস্যা নেই।\nদিন এখনো শেষ হয়নি। Restart করা যায়। 🔥"
+          "🌤️ দুপুর ১২টা!\n\nঅর্ধেক দিন প্রায় শেষ।\nআজ এখন পর্যন্ত কী করেছো?\nনিজেকে ১০-এর মধ্যে কত দেবে? 👀\n━━━━━━━━━━━━\n🌤️ It's 12 PM!\n\nAlmost half the day is over.\nWhat have you done so far?\nRate yourself out of 10. 👀",
+          "🥤 MIDDAY CHECK\n\nপানি খাও।\nচোখকে একটু বিশ্রাম দাও।\n━━━━━━━━━━━━\n🥤 MIDDAY CHECK\n\nDrink water.\nGive your eyes some rest.",
+          "☀️ GOOD AFTERNOON!\n\nসকালের plan নষ্ট হলেও সমস্যা নেই।\nদিন এখনো শেষ হয়নি। Restart করা যায়। 🔥\n━━━━━━━━━━━━\n☀️ GOOD AFTERNOON!\n\nEven if the morning plan failed, it's okay.\nThe day isn't over yet. You can restart. 🔥"
         ],
-        video: videos.afternoon
+        vid: "https://files.catbox.moe/1a18es.mp4"
       },
       "14:00": {
         texts: [
-          "🍛 দুপুর ২টা।\n\nখাওয়া হয়েছে?\nনাকি group-এর message পড়তে পড়তে lunch ভুলে গেছো? 😂",
-          "😌 2:00 PM\n\nএকটু slow হও।\nসবকিছু একসাথে ঠিক করতে হবে না।",
-          "🕌 Afternoon Reminder\n\nনিজের প্রয়োজনীয় কাজগুলো শেষ করো।\nদিন এখনো অনেকটা বাকি।"
+          "🍛 দুপুর ২টা।\n\nখাওয়া হয়েছে?\nনাকি group-এর message পড়তে পড়তে lunch ভুলে গেছো? 😂\n━━━━━━━━━━━━\n🍛 It's 2 PM.\n\nHave you eaten?\nOr did you forget lunch while reading group messages? 😂",
+          "😌 2:00 PM\n\nএকটু slow হও।\nসবকিছু একসাথে ঠিক করতে হবে না।\n━━━━━━━━━━━━\n😌 2:00 PM\n\nSlow down a little.\nYou don't have to fix everything at once.",
+          "🕌 Afternoon Reminder\n\nনিজের প্রয়োজনীয় কাজগুলো শেষ করো।\nদিন এখনো অনেকটা বাকি।\n━━━━━━━━━━━━\n🕌 Afternoon Reminder\n\nFinish your necessary tasks.\nThere's still a lot of day left."
         ],
-        video: videos.afternoon
+        vid: "https://files.catbox.moe/pamsg5.mp4"
       },
       "16:00": {
         texts: [
-          "🌇 বিকেল ৪টা।\n\nআজকের দিনটা এখনো তোমার হাতে আছে।\nআরও ভালো কিছু করা যায়। 🔥",
-          "🚶 বিকেলের reminder:\n\nসম্ভব হলে একটু হাঁটাহাঁটি করো।\nশুধু screen-এর দিকে তাকিয়ে থেকো না। 😂",
-          "⏳ 4:00 PM\n\nআজকের কতটা সময় useful ছিল?\nনিজের কাছে সত্যি উত্তরটা দিও।"
+          "🌇 বিকেল ৪টা।\n\nআজকের দিনটা এখনো তোমার হাতে আছে।\nআরও ভালো কিছু করা যায়। 🔥\n━━━━━━━━━━━━\n🌇 It's 4 PM.\n\nToday is still in your hands.\nYou can still do something better. 🔥",
+          "🚶 বিকেলের reminder:\n\nসম্ভব হলে একটু হাঁটাহাঁটি করো।\nশুধু screen-এর দিকে তাকিয়ে থেকো না। 😂\n━━━━━━━━━━━━\n🚶 Afternoon reminder:\n\nIf possible, take a short walk.\nDon't just keep staring at the screen. 😂",
+          "⏳ 4:00 PM\n\nআজকের কতটা সময় useful ছিল?\nনিজের কাছে সত্যি উত্তরটা দিও।\n━━━━━━━━━━━━\n⏳ 4:00 PM\n\nHow much of today's time was useful?\nGive yourself an honest answer."
         ],
-        video: videos.afternoon
+        vid: "https://files.catbox.moe/6in51c.mp4"
       },
       "18:00": {
         texts: [
-          "🌆 GOOD EVENING!\n\nদিনটা ধীরে ধীরে শেষ হচ্ছে।\nএকটু শান্ত হও। ❤️",
-          "🌇 সন্ধ্যা ৬টা।\n\nমোবাইলের বাইরেও একটা পৃথিবী আছে।\nপরিবারের সাথে একটু সময় কাটাও।",
-          "🕌 সন্ধ্যার সময়।\n\nসারাদিনের ব্যস্ততার মাঝে কয়েক মিনিট নিজের জন্য রাখো।"
+          "🌆 GOOD EVENING!\n\nদিনটা ধীরে ধীরে শেষ হচ্ছে।\nএকটু শান্ত হও। ❤️\n━━━━━━━━━━━━\n🌆 GOOD EVENING!\n\nThe day is slowly ending.\nCalm down a little. ❤️",
+          "🌇 সন্ধ্যা ৬টা।\n\nমোবাইলের বাইরেও একটা পৃথিবী আছে।\nপরিবারের সাথে একটু সময় কাটাও।\n━━━━━━━━━━━━\n🌇 It's 6 PM.\n\nThere's a world outside the phone.\nSpend some time with family.",
+          "🕌 সন্ধ্যার সময়।\n\nসারাদিনের ব্যস্ততার মাঝে কয়েক মিনিট নিজের জন্য রাখো।\n━━━━━━━━━━━━\n🕌 Evening time.\n\nIn the middle of the whole day's hustle, keep a few minutes for yourself."
         ],
-        video: videos.evening
+        vid: "https://files.catbox.moe/1wil0m.mp4"
       },
       "20:00": {
         texts: [
-          "🍽️ রাত ৮টা!\n\nDinner Check!\nখাবার খেয়েছো তো?\nনাকি এখনো group-এ পড়ে আছো? 😂",
-          "🌃 8:00 PM\n\nএকটু family time,\nএকটু হাসি,\nআর একটু নিজের জন্য সময়। ❤️",
-          "😌 রাত ৮টা।\n\nআজকের কাজ সব শেষ না হলেও সমস্যা নেই।\nযতটুকু পেরেছো, সেটুকুর জন্য নিজেকে credit দাও।"
+          "🍽️ রাত ৮টা!\n\nDinner Check!\nখাবার খেয়েছো তো?\nনাকি এখনো group-এ পড়ে আছো? 😂\n━━━━━━━━━━━━\n🍽️ It's 8 PM!\n\nDinner Check!\nHave you eaten?\nOr are you still stuck in the group? 😂",
+          "🌃 8:00 PM\n\nএকটু family time,\nএকটু হাসি,\nআর একটু নিজের জন্য সময়। ❤️\n━━━━━━━━━━━━\n🌃 8:00 PM\n\nA little family time,\na little smile,\nand a little time for yourself. ❤️",
+          "😌 রাত ৮টা।\n\nআজকের কাজ সব শেষ না হলেও সমস্যা নেই।\nযতটুকু পেরেছো, সেটুকুর জন্য নিজেকে credit দাও।\n━━━━━━━━━━━━\n😌 It's 8 PM.\n\nIt's okay if you didn't finish everything today.\nGive yourself credit for what you did manage."
         ],
-        video: videos.evening
+        vid: "https://files.catbox.moe/mcx3hp.mp4"
       },
       "22:00": {
         texts: [
-          "🌙 রাত ১০টা।\n\nআজকে অনেক screen time হয়েছে।\nআর কতক্ষণ scroll করবে? 😂",
-          "🛌 10:00 PM\n\nকালকের জন্য mind-টাকে একটু rest দাও।\nসব problem আজ রাতেই solve করতে হবে না।",
-          "🌙 GOOD NIGHT MODE: 70%\n\nদিনটা কেমন গেল?\nভালো হলে মনে রেখো।\nখারাপ হলে ছেড়ে দাও।\nকাল আবার চেষ্টা করা যাবে। ❤️"
+          "🌙 রাত ১০টা।\n\nআজকে অনেক screen time হয়েছে।\nআর কতক্ষণ scroll করবে? 😂\n━━━━━━━━━━━━\n🌙 It's 10 PM.\n\nYou've had a lot of screen time today.\nHow much longer will you scroll? 😂",
+          "🛌 10:00 PM\n\nকালকের জন্য mind-টাকে একটু rest দাও।\nসব problem আজ রাতেই solve করতে হবে না।\n━━━━━━━━━━━━\n🛌 10:00 PM\n\nGive your mind some rest for tomorrow.\nYou don't have to solve every problem tonight.",
+          "🌙 GOOD NIGHT MODE: 70%\n\nদিনটা কেমন গেল?\nভালো হলে মনে রেখো।\nখারাপ হলে ছেড়ে দাও।\nকাল আবার চেষ্টা করা যাবে। ❤️\n━━━━━━━━━━━━\n🌙 GOOD NIGHT MODE: 70%\n\nHow was your day?\nIf it was good, remember it.\nIf it was bad, let it go.\nYou can try again tomorrow. ❤️"
         ],
-        video: videos.night
+        vid: "https://files.catbox.moe/mmf2pw.mp4"
       }
     };
 
+    // ========== সাইলেন্স মেসেজ ==========
     const silenceMessages = [
-      "🦗🦗🦗\nএখানে এত নীরবতা কেন?\nঝিঁঝিঁ পোকার শব্দও শুনতে পাচ্ছি। 😂",
-      "👀 এই গ্রুপে কি সবাই invisible হয়ে গেলো?",
-      "📡 GROUP SIGNAL CHECK...\n\nকেউ কি আছো?\nনাকি সবাই অন্য গ্রুপে পালিয়ে গেছো? 😂",
-      "🤖 আমি এক ঘণ্টা ধরে অপেক্ষা করছি...\n\nকেউ একটা 'হাই' বললেও চলবে। 🥲",
-      "😶 এত চুপচাপ কেন?\n\nএই group কি এখন library হয়ে গেছে?",
-      "🚨 SILENCE DETECTED!\n\nগত এক ঘণ্টায় কোনো activity পাওয়া যায়নি।",
-      "👻 GHOST MODE ACTIVATED\n\nসবাই কি একসাথে ghost হয়ে গেছো? 👻",
-      "🕵️ সন্দেহ হচ্ছে...\n\nএই group-এর সবাই একসাথে ঘুমিয়ে পড়েছে।",
-      "📢 PUBLIC ANNOUNCEMENT\n\nএই group-এ কথা বলার অনুমতি এখনো চালু আছে। 😂",
-      "😴 GROUP STATUS\n\nActivity: 0%\nNoise: 0%\nDrama: Unknown 👀"
+      "🦗🦗🦗\nএখানে এত নীরবতা কেন?\nঝিঁঝিঁ পোকার শব্দও শুনতে পাচ্ছি। 😂\n━━━━━━━━━━━━\n🦗🦗🦗\nWhy is it so quiet here?\nI can even hear the crickets. 😂",
+      "👀 এই গ্রুপে কি সবাই invisible হয়ে গেলো?\n━━━━━━━━━━━━\n👀 Did everyone in this group turn invisible?",
+      "📡 GROUP SIGNAL CHECK...\n\nকেউ কি আছো?\nনাকি সবাই অন্য গ্রুপে পালিয়ে গেছো? 😂\n━━━━━━━━━━━━\n📡 GROUP SIGNAL CHECK...\n\nIs anyone here?\nOr did everyone run away to another group? 😂",
+      "🤖 আমি এক ঘণ্টা ধরে অপেক্ষা করছি...\n\nকেউ একটা 'হাই' বললেও চলবে। 🥲\n━━━━━━━━━━━━\n🤖 I've been waiting for an hour...\n\nEven a simple 'hi' would be fine. 🥲",
+      "😶 এত চুপচাপ কেন?\n\nএই group কি এখন library হয়ে গেছে?\n━━━━━━━━━━━━\n😶 Why so silent?\n\nHas this group turned into a library?",
+      "🚨 SILENCE DETECTED!\n\nগত এক ঘণ্টায় কোনো activity পাওয়া যায়নি।\n━━━━━━━━━━━━\n🚨 SILENCE DETECTED!\n\nNo activity found in the last hour.",
+      "👻 GHOST MODE ACTIVATED\n\nসবাই কি একসাথে ghost হয়ে গেছো? 👻\n━━━━━━━━━━━━\n👻 GHOST MODE ACTIVATED\n\nDid everyone become ghosts together? 👻"
     ];
 
-    function getRandom(list, threadID) {
-      if (!data.recentMain[threadID]) data.recentMain[threadID] = [];
-      let available = list.filter(msg => !data.recentMain[threadID].includes(msg));
-      if (available.length === 0) {
-        data.recentMain[threadID] = [];
-        available = list;
-      }
-      const selected = available[Math.floor(Math.random() * available.length)];
-      data.recentMain[threadID].push(selected);
-      if (data.recentMain[threadID].length > 6) data.recentMain[threadID].shift();
-      return selected;
-    }
+    global.autoInterval = setInterval(async () => {
+      if (!WHITELIST || WHITELIST.length === 0) return;
 
-    async function sendWithVideo(text, videoUrl, threadID) {
-      try {
-        let attachment = null;
-        if (videoUrl && global.utils && global.utils.getStreamFromURL) {
-          attachment = await global.utils.getStreamFromURL(videoUrl);
-        }
-        if (attachment) {
-          await api.sendMessage({ body: text, attachment }, threadID);
-        } else {
-          await api.sendMessage(text, threadID);
-        }
-      } catch (e) {
-        try {
-          await api.sendMessage(text, threadID);
-        } catch (err) {}
-      }
-    }
+      const bd = new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" });
+      const now = new Date(bd);
+      const hm = `\( {String(now.getHours()).padStart(2, "0")}: \){String(now.getMinutes()).padStart(2, "0")}`;
 
-    // Daily Report 00:05
-    const reportRule = new schedule.RecurrenceRule();
-    reportRule.tz = "Asia/Dhaka";
-    reportRule.hour = 0;
-    reportRule.minute = 5;
+      // ১. মেইন মেসেজ (প্রতি ২ ঘণ্টা)
+      if (schedule[hm] && global.autosentData.lastSent !== hm) {
+        global.autosentData.lastSent = hm;
+        const list = schedule[hm].texts;
+        if (!global.autosentData.msgIndex[hm]) global.autosentData.msgIndex[hm] = 0;
+        const idx = global.autosentData.msgIndex[hm] % list.length;
+        const text = list[idx];
+        global.autosentData.msgIndex[hm]++;
 
-    schedule.scheduleJob(reportRule, async () => {
-      if (!global.data?.allThreadID) return;
-      const threads = global.data.allThreadID;
-
-      for (const threadID of threads) {
-        const total = data.dailyMessages[threadID] || 0;
-        const members = data.dailyMembers[threadID] ? Object.keys(data.dailyMembers[threadID]).length : 0;
-
-        let activity = "😴 Very Quiet";
-        if (total >= 500) activity = "🔥 EXTREMELY ACTIVE";
-        else if (total >= 250) activity = "⚡ VERY ACTIVE";
-        else if (total >= 100) activity = "😎 ACTIVE";
-        else if (total >= 30) activity = "🙂 NORMAL";
-
-        const yesterday = moment().tz("Asia/Dhaka").subtract(1, "day").format("DD MMM YYYY");
-
-        const report = `📊 DAILY GROUP REPORT
-━━━━━━━━━━━━━━━━━━
-📅 Date: ${yesterday}
-
-💬 Total Messages: ${total}
-👥 Active Members: ${members}
-
-📈 Activity Level:
-${activity}
-
-━━━━━━━━━━━━━━━━━━
-🌙 নতুন দিন শুরু হয়েছে।
-Let's make today better. 🔥`;
-
-        try {
-          await api.sendMessage(report, threadID);
-          await new Promise(r => setTimeout(r, 1500));
-        } catch (e) {}
-
-        data.dailyMessages[threadID] = 0;
-        data.dailyMembers[threadID] = {};
-      }
-      console.log(chalk.hex("#fbbf24").bold("📊 Daily Reports Sent (00:05 BD)"));
-    });
-
-    // Main every 2 hours
-    Object.keys(messages).forEach(time => {
-      const [hour, minute] = time.split(":").map(Number);
-
-      const rule = new schedule.RecurrenceRule();
-      rule.tz = "Asia/Dhaka";
-      rule.hour = hour;
-      rule.minute = minute || 0;
-
-      schedule.scheduleJob(rule, async () => {
-        if (!global.data?.allThreadID) return;
-        const threads = global.data.allThreadID;
-        const msgData = messages[time];
-
-        for (const threadID of threads) {
-          const text = getRandom(msgData.texts, threadID);
-          await sendWithVideo(text, msgData.video, threadID);
+        for (const id of WHITELIST) {
+          await sendV(api, id, text, schedule[hm].vid);
           await new Promise(r => setTimeout(r, 2000));
         }
-        console.log(chalk.hex("#34d399")(`✓ Main + MP4 → ${time} (BD Time)`));
-      });
+      }
 
-      console.log(chalk.hex("#67e8f9")(`✓ Scheduled → ${time} (BD)`));
-    });
-
-    // Silence every 90 minutes
-    schedule.scheduleJob("*/90 * * * *", async () => {
-      if (!global.data?.allThreadID) return;
-      const threads = global.data.allThreadID;
-      const now = Date.now();
-      const ONE_HOUR_30 = 90 * 60 * 1000;
-
-      for (const threadID of threads) {
-        const lastActivity = data.activity[threadID] || 0;
-        if (!lastActivity) continue;
-
-        if (now - lastActivity >= ONE_HOUR_30) {
-          const text = getRandom(silenceMessages, threadID);
-          try {
-            await api.sendMessage(`😂 SILENCE DETECTOR\n\n${text}`, threadID);
-            await new Promise(r => setTimeout(r, 1500));
-            console.log(chalk.hex("#facc15")(`🔇 Silent Group → ${threadID}`));
-          } catch (e) {}
+      // ২. ডেইলি রিপোর্ট (00:05)
+      if (hm === "00:05" && global.autosentData.lastReport !== hm) {
+        global.autosentData.lastReport = hm;
+        for (const id of WHITELIST) {
+          const count = global.autosentData.dailyMessages[id] || 0;
+          api.sendMessage(
+            `📊 𝗗𝗔𝗜𝗟𝗬 𝗥𝗘𝗣𝗢𝗥𝗧\n━━━━━━━━━━━━━\n💬 আজকের মোট মেসেজ: ${count}\n━━━━━━━━━━━━\n💬 Total messages today: ${count}\n🌙 দিনটি সবার কেমন কাটলো?`,
+            id
+          );
+          global.autosentData.dailyMessages[id] = 0;
         }
       }
-    });
 
-    console.log(chalk.hex("#fbbf24").bold("✓ Silence Detector → Every 1 hour 30 minutes"));
-    console.log(chalk.hex("#a78bfa").bold("✓ Daily Report → 00:05 AM (BD)"));
-    console.log(chalk.hex("#34d399").bold("✓ Main Messages + MP4 → Every 2 hours (BD Time)"));
+      // ৩. সাইলেন্স ডিটেক্টর
+      if (now.getMinutes() % 30 === 0 && now.getSeconds() < 20) {
+        for (const id of WHITELIST) {
+          const lastActive = global.autosentData.activity[id] || Date.now();
+          if (Date.now() - lastActive > 90 * 60 * 1000) {
+            const idx = global.autosentData.silenceIndex % silenceMessages.length;
+            const text = silenceMessages[idx];
+            global.autosentData.silenceIndex++;
+            api.sendMessage(text, id);
+            global.autosentData.activity[id] = Date.now();
+          }
+        }
+      }
+    }, 20000);
   },
 
-  onChat: async function ({ event, api }) {
-    if (!event || !event.threadID) return;
+  onChat: async function ({ event }) {
+    if (!event.threadID) return;
+    const id = event.threadID;
 
-    try {
-      const botID = api.getCurrentUserID();
-      if (event.senderID == botID) return;
-    } catch (e) {}
+    // শুধু whitelist গ্রুপ ট্র্যাক করবে
+    if (!WHITELIST.includes(id)) return;
 
-    const threadID = event.threadID;
-    const senderID = event.senderID;
-
-    global.autosentData = global.autosentData || {
-      activity: {},
-      dailyMessages: {},
-      dailyMembers: {},
-      recentMain: {}
-    };
-
-    const data = global.autosentData;
-    data.activity[threadID] = Date.now();
-
-    if (!data.dailyMessages[threadID]) data.dailyMessages[threadID] = 0;
-    data.dailyMessages[threadID]++;
-
-    if (!data.dailyMembers[threadID]) data.dailyMembers[threadID] = {};
-    if (senderID) data.dailyMembers[threadID][senderID] = true;
+    global.autosentData = global.autosentData || { activity: {}, dailyMessages: {} };
+    global.autosentData.activity[id] = Date.now();
+    global.autosentData.dailyMessages[id] = (global.autosentData.dailyMessages[id] || 0) + 1;
   }
 };
+
+async function sendV(api, id, text, url) {
+  try {
+    const res = await axios.get(url, { responseType: "stream" });
+    const msg = text ? { body: text, attachment: res.data } : { attachment: res.data };
+    await api.sendMessage(msg, id);
+  } catch (e) {
+    if (text) await api.sendMessage(text, id);
+  }
+}
