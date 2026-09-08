@@ -60,6 +60,24 @@ function extractCommandName(code) {
   return nameMatch ? nameMatch[1].trim() + ".js" : null;
 }
 
+function loadInstalledCommand(filePath) {
+  try {
+    delete require.cache[require.resolve(filePath)];
+    const command = require(filePath);
+    const config = command && command.config;
+    if (!config || !config.name || typeof command.onStart !== 'function')
+      throw new Error('Invalid command: config.name and onStart are required.');
+    const name = String(config.name).toLowerCase();
+    command.location = filePath;
+    global.GoatBot.commands.set(name, command);
+    if (Array.isArray(config.aliases)) config.aliases.forEach(alias => global.GoatBot.aliases.set(String(alias).toLowerCase(), name));
+    if (typeof command.onChat === 'function' && !global.GoatBot.onChat.includes(name)) global.GoatBot.onChat.push(name);
+    if (typeof command.onFirstChat === 'function') global.GoatBot.onFirstChat.push({ commandName: name, threadIDsChattedFirstTime: [] });
+    if (typeof command.onLoad === 'function') Promise.resolve(command.onLoad({})).catch(() => {});
+    return { status: 'success', name };
+  } catch (error) { return { status: 'error', error }; }
+}
+
 module.exports = {
   config: {
     name: "install",
@@ -142,13 +160,7 @@ module.exports = {
 
     fs.writeFileSync(filePath, rawCode);
 
-    const load = global.utils.loadScripts(
-      "cmds",
-      fileName.replace(".js", ""),
-      log,
-      configCommands,
-      api
-    );
+    const load = loadInstalledCommand(filePath);
 
     if (load.status === "success") {
       return message.reply(
@@ -173,13 +185,7 @@ module.exports = {
 
     fs.writeFileSync(filePath, rawCode);
 
-    const load = global.utils.loadScripts(
-      "cmds",
-      fileName.replace(".js", ""),
-      log,
-      configCommands,
-      api
-    );
+    const load = loadInstalledCommand(filePath);
 
     if (load.status === "success") {
       message.reply(
