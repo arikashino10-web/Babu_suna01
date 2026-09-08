@@ -296,13 +296,14 @@ module.exports.onReply = async function ({ api, event, Reply, usersData: Users }
  }
 };
 
-module.exports.onChat = async ({ api, event, message }) => {
+module.exports.onChat = async ({ api, event, message, prefix }) => {
  try {
   const rawBody = event.body ? String(event.body).trim() : "";
   const body = rawBody.toLowerCase();
+  const isCommand = Boolean(prefix && rawBody.startsWith(prefix));
   const triggerText = getTriggerText(rawBody);
   const activeSession = isSessionActive(event);
-  const triggered = triggerText !== null || activeSession;
+  const triggered = !isCommand && (triggerText !== null || activeSession);
   if (event.type !== "message_reply" && triggered) {
    api.setMessageReaction("🪽", event.messageID, () => {}, true);
    api.sendTypingIndicator(event.threadID, true);
