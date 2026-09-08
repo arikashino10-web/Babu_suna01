@@ -338,9 +338,8 @@ module.exports.onChat = async function ({ api, event, usersData, prefix }) {
   const raw = String(event.body || "").trim();
   if (!raw || (prefix && raw.startsWith(prefix))) return;
   const triggerText = getTriggerText(raw);
-  const active = isSessionActive(event);
-  if (triggerText === null && !active) return;
-  const text = triggerText !== null ? triggerText : raw;
+  if (triggerText === null) return;
+  const text = triggerText;
   if (isStopText(text)) {
     clearSession(event);
     return sendMessage(api, event, "✅ bby conversation বন্ধ করা হয়েছে। আবার bby লিখলে চালু হবে।");
