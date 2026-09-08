@@ -7,6 +7,12 @@ const NOOBS_API = "https://noobs-api.top/dipto";
 const SECONDARY_API = "https://baby-apisx.vercel.app";
 const SIMSIM_API = "https://simsimi-api-tjb1.onrender.com";
 const TRIGGERS = ["baby", "bby", "babu", "bbu", "bot", "jan", "janu", "জান", "জানু", "বেবি", "wifey", "hinata", "hina", "suna", "sara", "mikasa", "alya"];
+const LOCAL_FALLBACK_REPLIES = [
+  "এই মুহূর্তে baby API-গুলো busy, তবুও আমি তোমার কথা শুনছি 😌",
+  "API একটু ঘুমাচ্ছে জানু, আবার বলো তো 🥺",
+  "সব online reply service ব্যস্ত—local baby reply চালু আছে 💖",
+  "আমি আছি, API না থাকলেও তোমাকে ignore করছি না 😚"
+];
 
 const sessions = new Map();
 const autoTeachUsers = new Set();
@@ -69,7 +75,7 @@ async function getSahuBase() {
 
 function extractReplies(payload) {
   if (!payload || typeof payload !== "object") return [];
-  const raw = payload.response ?? payload.reply ?? payload.text ?? payload.data?.reply;
+  const raw = payload.response ?? payload.reply ?? payload.text ?? payload.data?.reply ?? payload.data?.response;
   const list = Array.isArray(raw) ? raw : [raw];
   return list.map(value => String(value || "").trim()).filter(value => value && !/undefined|internal server error|cannot read propert/i.test(value));
 }
@@ -104,7 +110,8 @@ async function getChatReplies(text, event, senderName) {
       lastError = error;
     }
   }
-  throw new Error(lastError?.message || "All baby APIs are unavailable");
+  console.error("baby API fallback exhausted:", lastError?.message || "unknown error");
+  return [LOCAL_FALLBACK_REPLIES[Math.floor(Math.random() * LOCAL_FALLBACK_REPLIES.length)]];
 }
 
 async function getAttachmentReply(event) {
@@ -247,6 +254,14 @@ async function runCommandAction({ api, event, args, usersData }) {
       return sendMessage(api, event, data.message || "✅ Edited successfully.");
     }
 
+    if (first === "teach" && ["sticker", "picture"].includes(String(args[1] || "").toLowerCase())) {
+      const mediaType = String(args[1]).toLowerCase();
+      const reply = raw.replace(/^teach\s+(sticker|picture)\s*/i, "").replace(/^-\s*/, "").trim();
+      if (!reply) return sendMessage(api, event, "❌ ব্যবহার: baby teach " + mediaType + " - reply");
+      const data = (await axios.get(SECONDARY_API + "/baby/" + mediaType + "?teach=1&reply=" + encodeURIComponent(reply) + "&senderID=" + encodeURIComponent(uid), { timeout: 12000 })).data || {};
+      return sendMessage(api, event, "✅ " + (data.message || "Media reply added."));
+    }
+
     if (first === "teach" && String(args[1] || "").toLowerCase() === "react") {
       const parts = raw.replace(/^teach\s+react\s+/i, "").split(/\s*-\s*/);
       if (parts.length < 2) return sendMessage(api, event, "❌ ব্যবহার: baby teach react question - ❤️, 😀");
@@ -311,7 +326,7 @@ module.exports.onStart = async function ({ api, event, args, usersData }) {
 module.exports.onReply = async function ({ api, event, Reply, usersData }) {
   if (Reply?.author && String(Reply.author) !== String(event.senderID)) return;
   const text = String(event.body || "").trim();
-  if (!text) return;
+  if (!text && !event.attachments?.length) return;
   if (isStopText(text)) {
     clearSession(event);
     return sendMessage(api, event, "✅ bby conversation বন্ধ করা হয়েছে। আবার bby লিখলে চালু হবে।");
