@@ -17,6 +17,45 @@ const arafat = [
   "hinata",
 ];
 
+
+const SESSION_TTL = 30 * 60 * 1000;
+const sessions = new Map();
+
+function getSessionKey(event) {
+  return String(event.threadID) + ':' + String(event.senderID || event.userID);
+}
+
+function activateSession(event) {
+  sessions.set(getSessionKey(event), Date.now() + SESSION_TTL);
+}
+
+function isSessionActive(event) {
+  const key = getSessionKey(event);
+  const expiresAt = sessions.get(key);
+  if (!expiresAt) return false;
+  if (expiresAt <= Date.now()) {
+    sessions.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function clearSession(event) {
+  sessions.delete(getSessionKey(event));
+}
+
+function getTriggerText(text) {
+  const normalized = String(text || '').trim().toLowerCase();
+  for (const trigger of arafat) {
+    if (normalized === trigger) return '';
+    if (normalized.startsWith(trigger + ' ')) return normalized.slice(trigger.length).trim();
+  }
+  return null;
+}
+
+function isStopText(text) {
+  return /^(stop|off|বন্ধ|থাম|থামো)$/i.test(String(text || '').trim());
+}
 module.exports.config = {
  name: "baby",
  aliases: ["bby", "jan", "janu", "wifey", "bot", "hinata", "জান", "জানু", "babu", "বেবি", "bbu"],
@@ -35,6 +74,12 @@ module.exports.onStart = async ({
     args,
     usersData
 }) => {
+    const input = args.join(' ').trim();
+    if (isStopText(input)) {
+        clearSession(event);
+        return api.sendMessage('✅ bby conversation বন্ধ করা হয়েছে। আবার bby লিখলে চালু হবে।', event.threadID, event.messageID);
+    }
+    activateSession(event);
     const link = `${await getMainAPI()}`;
     const dipto = args.join(" ").toLowerCase();
     const uid = event.senderID;
@@ -143,9 +188,15 @@ module.exports.onStart = async ({
     }
 };
 
-module.exports.onReply = async function ({ api, event, usersData: Users }) {
+module.exports.onReply = async function ({ api, event, Reply, usersData: Users }) {
  try {
+ if (Reply?.author && String(Reply.author) !== String(event.senderID)) return;
  const body = event.body ? event.body.toLowerCase() : "";
+ if (isStopText(body)) {
+  clearSession(event);
+  return api.sendMessage('✅ bby conversation বন্ধ করা হয়েছে। আবার bby লিখলে চালু হবে।', event.threadID, event.messageID);
+ }
+ activateSession(event);
  const triggered = arafat.some(word => body.startsWith(word));
  if (triggered) {
   api.setMessageReaction("🪽", event.messageID, () => {}, true);
@@ -247,16 +298,20 @@ module.exports.onReply = async function ({ api, event, usersData: Users }) {
 
 module.exports.onChat = async ({ api, event, message }) => {
  try {
-  const body = event.body ? event.body.toLowerCase() : "";
-  if (event.type !== "message_reply" && arafat.some(word => body.startsWith(word))) {
+  const rawBody = event.body ? String(event.body).trim() : "";
+  const body = rawBody.toLowerCase();
+  const triggerText = getTriggerText(rawBody);
+  const activeSession = isSessionActive(event);
+  const triggered = triggerText !== null || activeSession;
+  if (event.type !== "message_reply" && triggered) {
    api.setMessageReaction("🪽", event.messageID, () => {}, true);
    api.sendTypingIndicator(event.threadID, true);
-   const arr = (() => {
-    for (const prefix of arafat) {
-     if (body.startsWith(prefix)) return body.substring(prefix.length).trim();
-    }
-    return "";
-   })();
+   const arr = (triggerText !== null ? triggerText : rawBody).toLowerCase();
+   if (isStopText(arr)) {
+    clearSession(event);
+    return api.sendMessage('✅ bby conversation বন্ধ করা হয়েছে। আবার bby লিখলে চালু হবে।', event.threadID, event.messageID);
+   }
+   activateSession(event);
    const randomReplies = [
         "babu khuda lagse🥺",
           "Hop beda😾,Boss বল boss😼",  
