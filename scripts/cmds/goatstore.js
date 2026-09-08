@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
+const { execFileSync } = require("child_process");
+const { builtinModules } = require("module");
 
 const API_BASE = "https://mirai-store.vercel.app";
 const userSeenNoti = new Map();
@@ -129,8 +131,8 @@ async function getTodayUpdates() {
 async function runAutoSync() {
   const baseDir = process.cwd();
   const folders = [
-    { dir: path.join(baseDir, "modules", "cmds"), kind: "command" },
-    { dir: path.join(baseDir, "modules", "events"), kind: "event" }
+    { dir: path.join(baseDir, "scripts", "cmds"), kind: "command" },
+    { dir: path.join(baseDir, "scripts", "events"), kind: "event" }
   ].filter(f => fs.existsSync(f.dir));
 
   if (!folders.length) return;
@@ -227,22 +229,56 @@ async function animateSelfUpdate(api, threadID, version) {
   return info.messageID;
 }
 
+function ensureDependencies(code) {
+  const requires = code.match(/require\s*\(\s*[\"'`]([^\"'`]+)[\"'`]\s*\)/g) || [];
+  const packages = new Set();
+  for (const statement of requires) {
+    const match = statement.match(/[\"'`]([^\"'`]+)[\"'`]/);
+    if (!match) continue;
+    let name = match[1];
+    if (name.startsWith('.') || name.startsWith('/') || name.startsWith('node:')) continue;
+    if (builtinModules.includes(name)) continue;
+    if (name.startsWith('@')) name = name.split('/').slice(0, 2).join('/');
+    else name = name.split('/')[0];
+    packages.add(name);
+  }
+  for (const name of packages) {
+    if (!fs.existsSync(path.join(process.cwd(), 'node_modules', name)))
+      execFileSync('npm', ['install', name, '--save'], { stdio: 'ignore' });
+  }
+}
+
 function autoloadCommand(filePath) {
   try {
+    const code = fs.readFileSync(filePath, 'utf8');
+    ensureDependencies(code);
     delete require.cache[require.resolve(filePath)];
     const cmd = require(filePath);
-    if (cmd?.config?.name) {
-      const name = cmd.config.name.toLowerCase();
-      global.GoatBot.commands.set(name, cmd);
-      if (Array.isArray(cmd.config.aliases))
-        cmd.config.aliases.forEach(a => global.GoatBot.commands.set(a.toLowerCase(), cmd));
-      if (typeof cmd.onLoad === "function") cmd.onLoad({});
-      return { success: true, name };
+    const config = cmd && cmd.config;
+    if (!config || !config.name || typeof cmd.onStart !== 'function')
+      return { success: false, reason: 'Invalid GoatBot command: config.name and onStart are required.' };
+    const name = String(config.name).toLowerCase();
+    cmd.location = filePath;
+    global.GoatBot.onChat = global.GoatBot.onChat.filter(n => String(n).toLowerCase() !== name);
+    global.GoatBot.onFirstChat = global.GoatBot.onFirstChat.filter(item => String(item.commandName).toLowerCase() !== name);
+    global.GoatBot.onEvent = global.GoatBot.onEvent.filter(n => String(n).toLowerCase() !== name);
+    global.GoatBot.onAnyEvent = global.GoatBot.onAnyEvent.filter(n => String(n).toLowerCase() !== name);
+    for (const [alias, target] of global.GoatBot.aliases.entries()) {
+      if (String(target).toLowerCase() === name) global.GoatBot.aliases.delete(alias);
     }
-    return { success: false, reason: "Missing config.name." };
-  } catch (err) {
-    return { success: false, reason: err.message };
-  }
+    global.GoatBot.commands.set(name, cmd);
+    if (Array.isArray(config.aliases)) config.aliases.forEach(alias => global.GoatBot.aliases.set(String(alias).toLowerCase(), name));
+    if (typeof cmd.onChat === 'function') global.GoatBot.onChat.push(name);
+    if (typeof cmd.onFirstChat === 'function') global.GoatBot.onFirstChat.push({ commandName: name, threadIDsChattedFirstTime: [] });
+    if (typeof cmd.onEvent === 'function') global.GoatBot.onEvent.push(name);
+    if (typeof cmd.onAnyEvent === 'function') global.GoatBot.onAnyEvent.push(name);
+    if (global.GoatBot.commandFilesPath) {
+      global.GoatBot.commandFilesPath = global.GoatBot.commandFilesPath.filter(item => !item.commandName?.some(n => String(n).toLowerCase() === name));
+      global.GoatBot.commandFilesPath.push({ filePath, commandName: [name, ...(config.aliases || []).map(a => String(a).toLowerCase())] });
+    }
+    if (typeof cmd.onLoad === 'function') Promise.resolve(cmd.onLoad({})).catch(err => console.error('[goatstore] onLoad failed:', err.message));
+    return { success: true, name };
+  } catch (err) { return { success: false, reason: err.message }; }
 }
 
 async function doInstall(api, threadID, id, forceKind = null) {
@@ -275,9 +311,9 @@ async function doInstall(api, threadID, id, forceKind = null) {
 
   const fileName = displayName.replace(/\s+/g, "_") + ".js";
   const baseDir = process.cwd();
-  const installDir = isEvent ? path.join(baseDir, "modules", "events") : path.join(baseDir, "modules", "cmds");
+  const installDir = isEvent ? path.join(baseDir, "scripts", "events") : path.join(baseDir, "scripts", "cmds");
   const filePath = path.join(installDir, fileName);
-  const locLabel = isEvent ? `modules/events/${fileName}` : `modules/cmds/${fileName}`;
+  const locLabel = isEvent ? `scripts/events/${fileName}` : `scripts/cmds/${fileName}`;
 
   try {
     if (!fs.existsSync(installDir)) fs.mkdirSync(installDir, { recursive: true });
@@ -330,7 +366,7 @@ async function doInstallSilent(id, forceKind = null) {
   const isEvent = forceKind === "event" ? true : forceKind === "command" ? false : String(cmdData.type).endsWith("-event");
   const fileName = displayName.replace(/\s+/g, "_") + ".js";
   const baseDir = process.cwd();
-  const installDir = isEvent ? path.join(baseDir, "modules", "events") : path.join(baseDir, "modules", "cmds");
+  const installDir = isEvent ? path.join(baseDir, "scripts", "events") : path.join(baseDir, "scripts", "cmds");
   const filePath = path.join(installDir, fileName);
 
   try {
@@ -436,7 +472,7 @@ async function maybeAutoUpdate(api, threadID) {
 
 // --- Per-command update detection (name/author/version) -------------------
 function getLocalCommandFiles() {
-  const dir = path.join(process.cwd(), "modules", "cmds");
+  const dir = path.join(process.cwd(), "scripts", "cmds");
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter(f => f.endsWith(".js"));
 }
@@ -454,7 +490,7 @@ function extractMeta(content) {
 // and returns those where the store has a strictly newer version.
 async function checkCommandUpdates() {
   const files = getLocalCommandFiles();
-  const baseDir = path.join(process.cwd(), "modules", "cmds");
+  const baseDir = path.join(process.cwd(), "scripts", "cmds");
   const results = [];
 
   for (const file of files) {
@@ -1064,8 +1100,8 @@ module.exports = {
         return api.sendMessage(`📁 Usage:\n• ${prefix}gs upload <fileName>\n• ${prefix}gs upload event <fileName>`, threadID);
       const baseDir = process.cwd();
       const dirs = kind === "event"
-        ? [path.join(baseDir, "modules", "events")]
-        : [path.join(baseDir, "modules", "cmds"), path.join(baseDir, "modules", "events")];
+        ? [path.join(baseDir, "scripts", "events")]
+        : [path.join(baseDir, "scripts", "cmds"), path.join(baseDir, "scripts", "events")];
       let filePath = null;
       for (const dir of dirs) {
         if (fs.existsSync(path.join(dir, fileName))) { filePath = path.join(dir, fileName); break; }
