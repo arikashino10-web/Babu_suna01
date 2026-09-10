@@ -113,7 +113,7 @@ async function drawPage1(ctx) {
   ctx.shadowBlur = 12;
 
   const lines = [
-    "Nickname: JABED ", "Age: 18+", "DOB: 10 Ssc 2007*",
+    "Nickname: JABED ", "Age: 18+", "DOB: 10 Oct 2007*",
     "Gender: Male", "Religion: Islam", "Nationality: Bangladeshi",
     "Location: COX'S BAZAR ", "Class: Hsc candidate",
     `Time: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Dhaka" })}`
