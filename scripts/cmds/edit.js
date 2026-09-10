@@ -1,63 +1,71 @@
-const axios = require("axios");
+js const axios = require("axios");
 
 module.exports = {
   config: {
     name: "edit",
-    aliases: ["imgedit"],
-    version: "2.4",
-    author: "Neoaz ゐ", //API by RIFAT
-    countDown: 15,
+    aliases: [],
+    version: "0.0.7",
+    author: "Azadx69x",
+    countDown: 25, // Updated to 25 seconds
     role: 0,
-    shortDescription: { en: "Edit image with Seedream V4" },
-    longDescription: { en: "Edit or modify an existing image using Seedream V4 Edit AI model" },
+    shortDescription: "Edit image",
+    longDescription: "Reply to any image",
     category: "image",
-    guide: {
-      en: "Reply to an image with: {pn} <prompt>"
-    }
+    guide: "{pn} [text]"
   },
 
-  onStart: async function ({ message, event, api, args }) {
-    const hasPhotoReply = event.type === "message_reply" && event.messageReply?.attachments?.[0]?.type === "photo";
+  onStart: async function ({ api, event, args, message, usersData }) {
+    const { senderID, messageReply } = event;
 
-    if (!hasPhotoReply) {
-      return message.reply("Please reply to an image to edit.");
+    /* ===== VIP & PERMISSION CHECK ===== */
+    const ADMINS = global.GoatBot?.config?.adminBot || [];
+    const isBotAdmin = ADMINS.includes(senderID);
+
+    if (!isBotAdmin) {
+      const userData = await usersData.get(senderID);
+      const vip = userData?.data?.vip;
+
+      if (!vip || !vip.expires || vip.expires < Date.now()) {
+        return api.sendMessage("❌ 𝐕𝐈𝐏 𝐎𝐍𝐋𝐘 𝐂𝐎𝐌𝐌𝐀𝐍𝐃\n" +
+          "• 𝐎𝐧𝐥𝐲 𝐕𝐈𝐏 𝐮𝐬𝐞𝐫𝐬 𝐜𝐚𝐧 𝐮𝐬𝐞 𝐞𝐝𝐢𝐭\n" +
+          "• 𝐓𝐲𝐩𝐞: vip buy", event.threadID, event.messageID);
+      }
     }
 
-    const prompt = args.join(" ").trim();
-    if (!prompt) {
-      return message.reply("Please provide a prompt.");
-    }
-
-    const model = "seedream v4 edit";
-    const imageUrl = event.messageReply.attachments[0].url;
+    const react = (emoji) => api.setMessageReaction(emoji, event.messageID, () => {}, true);
 
     try {
-      api.setMessageReaction("⏳", event.messageID, () => {}, true);
+      const prompt = args.join(" ");
 
-      const res = await axios.get("https://fluxcdibai-1.onrender.com/generate", {
-        params: { prompt, model, imageUrl },
-        timeout: 120000
-      });
-
-      const data = res.data;
-      const resultUrl = data?.data?.imageResponseVo?.url;
-
-      if (!resultUrl) {
-        api.setMessageReaction("❌", event.messageID, () => {}, true);
-        return message.reply("Failed to edit image.");
+      if (!prompt) {
+        react("⚠️");
+        return api.sendMessage("⚠️ | Please provide text.", event.threadID);
       }
 
-      api.setMessageReaction("✅", event.messageID, () => {}, true);
+      const imageUrl = messageReply?.attachments[0]?.url;
 
-      await message.reply({
-        body: "Image edited 🐦",
-        attachment: await global.utils.getStreamFromURL(resultUrl)
-      });
+      if (!imageUrl) {
+        react("🖼️");
+        return api.sendMessage("🖼️ | Please reply to an image.", event.threadID);
+      }
 
-    } catch (err) {
-      console.error(err);
-      api.setMessageReaction("❌", event.messageID, () => {}, true);
-      return message.reply("Error while editing image.");
+      react("⏳");
+
+      const apiUrl = `https://azadx69x.is-a.dev/api/editor?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
+
+      const response = await axios.get(apiUrl, { responseType: "stream" });
+
+      react("✅");
+
+      api.sendMessage({
+        body: `🖌 𝐈𝐦𝐚𝐠𝐞 𝐞𝐝𝐢𝐭𝐞𝐝 𝐬𝐮𝐜𝐜𝐞𝐬𝐬𝐟𝐮𝐥𝐥𝐲.\n𝐏𝐫𝐨𝐦𝐩𝐭: ${prompt}`,
+        attachment: response.data
+      }, event.threadID, messageReply?.messageID);
+
+    } catch (error) {
+      console.error(error);
+      react("❌");
+      api.sendMessage("❌ | Failed to process image.", event.threadID);
     }
   }
 };
