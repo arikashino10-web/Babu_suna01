@@ -106,21 +106,36 @@ module.exports = {
   config: {
     name: "hug",
     aliases: ["xdis"],
-    version: "1.0",
+    version: "1.1",
     author: "rX",
     role: 0,
-    description: "🤗 Send a hug animation with the person you reply to",
+    description: "🤗 Send a hug animation with the person you tag or reply to",
     category: "fun",
-    guide: "Reply to someone's message with: hug"
+    guide: {
+      en: "{pn} @tag\n{pn} (reply to someone)"
+    }
   },
 
   onStart: async function ({ event, message, usersData }) {
-    if (!event.messageReply || !event.messageReply.senderID) {
-      return message.reply("❌ You must reply to someone's message to hug them 🤗");
+    const uid1 = event.senderID;
+    let uid2 = null;
+
+    // 1. রিপ্লাই থেকে নেওয়া
+    if (event.messageReply && event.messageReply.senderID) {
+      uid2 = event.messageReply.senderID;
+    }
+    // 2. ট্যাগ (@mention) থেকে নেওয়া
+    else if (event.mentions && Object.keys(event.mentions).length > 0) {
+      uid2 = Object.keys(event.mentions)[0]; // প্রথম ট্যাগ করা ইউজার
     }
 
-    const uid1 = event.senderID;
-    const uid2 = event.messageReply.senderID;
+    if (!uid2) {
+      return message.reply("❌ কাউকে ট্যাগ করো অথবা কারো মেসেজে রিপ্লাই দিয়ে `hug` লেখো 🤗");
+    }
+
+    if (uid1 === uid2) {
+      return message.reply("❌ নিজেকে হাগ করতে পারবে না 😅");
+    }
 
     const url1 = await getAvatar(uid1, usersData);
     const url2 = await getAvatar(uid2, usersData);
@@ -133,8 +148,11 @@ module.exports = {
       const mergedPath = await mergeAvatars(url1, url2);
       const result = await imgToVideo(prompt, mergedPath);
 
+      const name1 = await usersData.getName(uid1);
+      const name2 = await usersData.getName(uid2);
+
       await message.reply({
-        body: `🤗 | ${await usersData.getName(uid1)} hugged ${await usersData.getName(uid2)}!`,
+        body: `🤗 | ${name1} hugged ${name2}!`,
         attachment: await getStreamFromURL(result[0].video_url)
       });
 
