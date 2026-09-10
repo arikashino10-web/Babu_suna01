@@ -29,7 +29,7 @@ module.exports = {
     }
 
     let text = args.join(" ").trim();
-    if (!text) text = messageReply.body || "📢 বট নোটিফিকেশন";
+    if (!text) text = messageReply.body || " 📢 এই শুনছো";
 
     // ৩. বটের সব গ্রুপ আইডি বের করা (১০০০ গ্রুপ পর্যন্ত লিমিট বাড়ানো হয়েছে)
     let allThreads = [];
