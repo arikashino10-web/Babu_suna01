@@ -2,13 +2,13 @@ module.exports = {
   config: {
     name: "tagreply",
     aliases: ["tr", "tagr", "nametag"],
-    version: "1.1.0",
+    version: "2.0.0",
     author: "Banu_suna",
-    countDown: 3,
+    countDown: 2,
     role: 0,
     description: {
-      en: "Tag a member by name or by replying to their message (bot replies to their message)",
-      bn: "নাম দিয়ে বা কারো মেসেজে রিপ্লাই দিয়ে ট্যাগ করুন (বট সরাসরি সেই মেসেজে রিপ্লাই দেয়)"
+      en: "Tag a member by name or by replying to their message",
+      bn: "নাম দিয়ে বা কারো মেসেজে রিপ্লাই দিয়ে ট্যাগ করুন"
     },
     category: "box chat",
     guide: {
@@ -30,56 +30,47 @@ module.exports = {
     }
   },
 
-  onStart: async function ({ api, event, args, message, usersData, getLang }) {
+  onStart: async function ({ api, event, args, message, usersData, threadsData, getLang }) {
     const { threadID, senderID, messageReply } = event;
-    const extraMessage = args.join(" ").trim();
 
     try {
-      // ========== MODE 1: Reply to someone's message ==========
+      // ========== MODE 1: Reply to someone's message (Fast Path) ==========
       if (messageReply && messageReply.senderID) {
         const targetID = messageReply.senderID;
         const replyToMsgID = messageReply.messageID;
-
-        // Optional: prevent tagging self
-        // if (targetID === senderID) {
-        //   return message.reply(getLang("cannotTagSelf"));
-        // }
+        const extraMessage = args.join(" ").trim();
 
         let targetName = "User";
-        try {
-          const info = await api.getUserInfo(targetID);
-          if (info[targetID]?.name) targetName = info[targetID].name;
-        } catch (e) {}
 
+        // দ্রুত নাম আনার চেষ্টা
         try {
           const dbName = await usersData.getName(targetID);
           if (dbName) targetName = dbName;
         } catch (e) {}
 
-        const tagText = `@${targetName}`;
-        let body = tagText;
-        if (extraMessage) {
-          body += "\n" + extraMessage;
+        if (targetName === "User") {
+          try {
+            const info = await api.getUserInfo(targetID);
+            if (info[targetID]?.name) targetName = info[targetID].name;
+          } catch (e) {}
         }
 
-        // Important: reply directly to the other person's message (NOT user's command)
+        const tagText = `@${targetName}`;
+        let body = tagText;
+        if (extraMessage) body += "\n" + extraMessage;
+
         return api.sendMessage(
           {
-            body: body,
-            mentions: [
-              {
-                tag: tagText,
-                id: targetID
-              }
-            ]
+            body,
+            mentions: [{ tag: tagText, id: targetID }]
           },
           threadID,
           null,
-          replyToMsgID   // <-- this makes the bot reply to THAT message
+          replyToMsgID
         );
       }
 
-      // ========== MODE 2: Tag by name (old behavior) ==========
+      // ========== MODE 2: Tag by name ==========
       if (!args[0]) {
         return message.reply(getLang("missing"));
       }
@@ -87,42 +78,66 @@ module.exports = {
       let searchQuery = args[0].toLowerCase().trim();
       let textAfterName = args.slice(1).join(" ").trim();
 
-      const threadInfo = await api.getThreadInfo(threadID);
-      const participantIDs = (threadInfo.participantIDs || []).filter(
-        id => id != api.getCurrentUserID()
-      );
+      // ---- Fast: threadsData থেকে নাম নেওয়ার চেষ্টা (ক্যাশ) ----
+      let members = [];
+      try {
+        const threadData = await threadsData.get(threadID);
+        if (threadData?.members && Array.isArray(threadData.members)) {
+          members = threadData.members
+            .filter(m => m.userID && m.userID != api.getCurrentUserID() && m.name)
+            .map(m => ({
+              id: m.userID,
+              name: m.name,
+              nameLower: m.name.toLowerCase(),
+              firstName: m.name.split(" ")[0].toLowerCase()
+            }));
+        }
+      } catch (e) {}
 
-      if (!participantIDs.length) {
+      // ---- threadsData খালি হলে getThreadInfo + batched getUserInfo ----
+      if (members.length === 0) {
+        const threadInfo = await api.getThreadInfo(threadID);
+        const participantIDs = (threadInfo.participantIDs || []).filter(
+          id => id != api.getCurrentUserID()
+        );
+
+        if (!participantIDs.length) {
+          return message.reply(getLang("notFound", searchQuery));
+        }
+
+        // Facebook API তে একবারে অনেক ID দিলে ফেইল করে — ৪০ করে ব্যাচ
+        const userInfos = {};
+        const chunkSize = 40;
+        for (let i = 0; i < participantIDs.length; i += chunkSize) {
+          const chunk = participantIDs.slice(i, i + chunkSize);
+          try {
+            const info = await api.getUserInfo(chunk);
+            Object.assign(userInfos, info);
+          } catch (e) {
+            // একটি চান্ক ফেইল হলেও বাকি চালু থাকবে
+          }
+        }
+
+        // usersData.getName লুপে না চালিয়ে শুধু getUserInfo ব্যবহার
+        for (const uid of participantIDs) {
+          const name = userInfos[uid]?.name;
+          if (!name) continue;
+          members.push({
+            id: uid,
+            name,
+            nameLower: name.toLowerCase(),
+            firstName: name.split(" ")[0].toLowerCase()
+          });
+        }
+      }
+
+      if (members.length === 0) {
         return message.reply(getLang("notFound", searchQuery));
       }
 
-      let userInfos = {};
-      try {
-        userInfos = await api.getUserInfo(participantIDs);
-      } catch (e) {}
+      // ---- Matching (priority order) ----
+      let matched = members.filter(m => m.firstName === searchQuery);
 
-      const members = [];
-      for (const uid of participantIDs) {
-        let name = userInfos[uid]?.name || null;
-        try {
-          const dbName = await usersData.getName(uid);
-          if (dbName) name = dbName;
-        } catch (e) {}
-
-        if (!name) continue;
-
-        members.push({
-          id: uid,
-          name: name,
-          nameLower: name.toLowerCase(),
-          firstName: name.split(" ")[0].toLowerCase()
-        });
-      }
-
-      let matched = [];
-
-      // Priority matching
-      matched = members.filter(m => m.firstName === searchQuery);
       if (matched.length === 0) {
         matched = members.filter(m => m.nameLower === searchQuery);
       }
@@ -135,7 +150,7 @@ module.exports = {
         );
       }
 
-      // Try 2-word full name
+      // ২ শব্দের নাম চেষ্টা
       if (matched.length === 0 && args.length > 1) {
         const fullTry = args.slice(0, 2).join(" ").toLowerCase();
         matched = members.filter(
@@ -153,26 +168,26 @@ module.exports = {
         return message.reply(getLang("notFound", searchQuery));
       }
 
+      // অনেক ম্যাচ হলে শুধু প্রথম ১০ জন ট্যাগ (বড় গ্রুপে স্প্যাম আটকাতে)
+      if (matched.length > 10) {
+        matched = matched.slice(0, 10);
+      }
+
       const mentions = [];
       let body = "";
 
       for (const m of matched) {
         const tagText = `@${m.name}`;
-        mentions.push({
-          tag: tagText,
-          id: m.id
-        });
+        mentions.push({ tag: tagText, id: m.id });
         body += tagText + " ";
       }
 
       body = body.trim();
-      if (textAfterName) {
-        body += "\n" + textAfterName;
-      }
+      if (textAfterName) body += "\n" + textAfterName;
 
       return message.reply({
-        body: body,
-        mentions: mentions
+        body,
+        mentions
       });
 
     } catch (err) {
