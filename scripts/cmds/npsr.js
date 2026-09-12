@@ -21,105 +21,134 @@ function isTutorialVideo(video) {
 module.exports = {
   config: {
     name: "npsr",
-    aliases: [-],
-    version: "1.3.2",
+    aliases: ["animesr"],
+    version: "1.3.4",
     author: "Arafat",
     countDown: 5,
     role: 0,
     description: "Anime edits from TikTok",
     category: "media",
     guide: {
-      en: "{pn} [anime name]\n-[anime name] (works anywhere in chat)"
+      en: "{pn} [anime name]\nOr use: -[anime name] anywhere in chat"
     }
   },
 
   onStart: async function ({ api, event, args, message }) {
-    const query = args.join(" ");
-    if (!query) return message.reply(serifBold("𝐏𝐥𝐞𝐚𝐬𝐞 𝐩𝐫𝐨𝐯𝐢𝐝𝐞 𝐚𝐧 𝐚𝐧𝐢𝐦𝐞 𝐧𝐚𝐦𝐞! 🌸"));
-
+    const query = args.join(" ").trim();
+    if (!query) {
+      return message.reply(
+        serifBold("🌸 𝐏𝐥𝐞𝐚𝐬𝐞 𝐩𝐫𝐨𝐯𝐢𝐝𝐞 𝐚𝐧 𝐚𝐧𝐢𝐦𝐞 𝐧𝐚𝐦𝐞!") +
+        "\n\n📌 𝐄𝐱𝐚𝐦𝐩𝐥𝐞:\n.npsr naruto\n- naruto shippuden"
+      );
+    }
     return sendAnimeVideo({ api, event, message, query });
   },
 
   onChat: async function ({ api, event, message }) {
     const body = (event.body || "").trim();
 
-    const match = body.match(/^-(.+)$/s);
+    // Match: -anime name  (dash + optional space)
+    const match = body.match(/^-\s*(.+)$/s);
     if (!match) return;
 
     const query = match[1].trim();
     if (!query) return;
+
     return sendAnimeVideo({ api, event, message, query });
   }
 };
 
 async function sendAnimeVideo({ api, event, message, query }) {
-    api.setMessageReaction("✨", event.messageID, () => {}, true);
-
-    const cacheDir = path.join(__dirname, 'cache');
-    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
-    const pathVideo = path.join(cacheDir, `anisr_${Date.now()}.mp4`);
-
+  /* ═══════ SAFE REACTION HELPER ═══════ */
+  const react = (emoji) => {
     try {
-      const searchTerms = `${query} anime edit amv no watermark`;
-
-      const res = await axios.get(`https://azadx69x-tiktok-api.vercel.app/tiktok/search`, {
-        params: { query: searchTerms },
-        timeout: 15000
-      });
-
-      const rawVideos = res.data?.list;
-
-      if (!rawVideos || rawVideos.length === 0) {
-        api.setMessageReaction("❌", event.messageID, () => {}, true);
-        return message.reply(serifBold(""));
-      }
-
-      const videos = rawVideos.filter(v => !isTutorialVideo(v));
-
-      const getVideoId = (v) => v.video_id || v.id || v.url;
-
-      let selectedVideo = videos.find(v => !global.instaMemory.has(getVideoId(v)));
-      if (!selectedVideo) {
-        global.instaMemory.clear();
-        selectedVideo = videos[0];
-      }
-      global.instaMemory.add(getVideoId(selectedVideo));
-
-      const downloadUrl = selectedVideo.noWatermark || selectedVideo.play || selectedVideo.wmplay;
-
-      const videoResponse = await axios({
-        method: 'get',
-        url: downloadUrl,
-        responseType: 'arraybuffer',
-        timeout: 30000,
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-      });
-
-      await fs.writeFile(pathVideo, Buffer.from(videoResponse.data));
-
-      await message.reply({
-        body: serifBold(`• 𝐇𝐞𝐫𝐞 𝐢𝐬 𝐲𝐨𝐮𝐫 𝐯𝐢𝐝𝐞𝐨 𝐛𝐚𝐛𝐲  <😘`),
-        attachment: fs.createReadStream(pathVideo)
-      });
-
-      api.setMessageReaction("🌸", event.messageID, () => {}, true);
-
-    } catch (err) {
-      console.error("DEBUG ERROR:", err.message);
-      api.setMessageReaction("⚠️", event.messageID, () => {}, true);
-
-      const errorMsg = err.code === 'ECONNABORTED'
-        ? "⚠️ | 𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐨𝐧 𝐭𝐢𝐦𝐞𝐝 𝐨𝐮𝐭. 𝐓𝐫𝐲 𝐚𝐠𝐚𝐢𝐧!"
-        : "⚠️ | 𝐒𝐞𝐫𝐯𝐞𝐫 𝐢𝐬 𝐛𝐮𝐬𝐲 𝐨𝐫 𝐀𝐏𝐈 𝐢𝐬 𝐝𝐨𝐰𝐧. 𝐓𝐫𝐲 𝐚𝐠𝐚𝐢𝐧!";
-
-      return message.reply(serifBold(errorMsg));
-    } finally {
-      if (fs.existsSync(pathVideo)) {
-        setTimeout(() => {
-          try { fs.unlinkSync(pathVideo); } catch(e) {}
-        }, 20000);
-      }
+      api.setMessageReaction(emoji, event.messageID, (err) => {
+        if (err) console.log("[npsr] Reaction failed:", err.message || err);
+      }, true);
+    } catch (e) {
+      console.log("[npsr] Reaction error:", e.message);
     }
+  };
+
+  /* ═══════ INITIAL REACTION: ✨ (loading) ═══════ */
+  react("✨");
+
+  const cacheDir = path.join(__dirname, 'cache');
+  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
+  const pathVideo = path.join(cacheDir, `npsr_${Date.now()}.mp4`);
+
+  try {
+    const searchTerms = `${query} anime edit amv no watermark`;
+
+    const res = await axios.get(`https://azadx69x-tiktok-api.vercel.app/tiktok/search`, {
+      params: { query: searchTerms },
+      timeout: 15000
+    });
+
+    const rawVideos = res.data?.list;
+
+    if (!rawVideos || rawVideos.length === 0) {
+      react("❌");
+      return message.reply(serifBold("❌ 𝐍𝐨 𝐯𝐢𝐝𝐞𝐨𝐬 𝐟𝐨𝐮𝐧𝐝!"));
+    }
+
+    const videos = rawVideos.filter(v => !isTutorialVideo(v));
+
+    if (videos.length === 0) {
+      react("❌");
+      return message.reply(serifBold("❌ 𝐍𝐨 𝐚𝐧𝐢𝐦𝐞 𝐞𝐝𝐢𝐭𝐬 𝐟𝐨𝐮𝐧𝐝!"));
+    }
+
+    const getVideoId = (v) => v.video_id || v.id || v.url;
+
+    let selectedVideo = videos.find(v => !global.instaMemory.has(getVideoId(v)));
+    if (!selectedVideo) {
+      global.instaMemory.clear();
+      selectedVideo = videos[0];
+    }
+    global.instaMemory.add(getVideoId(selectedVideo));
+
+    const downloadUrl = selectedVideo.noWatermark || selectedVideo.play || selectedVideo.wmplay;
+
+    if (!downloadUrl) {
+      react("❌");
+      return message.reply(serifBold("❌ 𝐕𝐢𝐝𝐞𝐨 𝐮𝐫𝐥 𝐧𝐨𝐭 𝐟𝐨𝐮𝐧𝐝!"));
+    }
+
+    const videoResponse = await axios({
+      method: 'get',
+      url: downloadUrl,
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+
+    await fs.writeFile(pathVideo, Buffer.from(videoResponse.data));
+
+    await message.reply({
+      body: serifBold(`• 𝐇𝐞𝐫𝐞 𝐢𝐬 𝐲𝐨𝐮𝐫 𝐯𝐢𝐝𝐞𝐨 𝐛𝐚𝐛𝐲  <😘`),
+      attachment: fs.createReadStream(pathVideo)
+    });
+
+    /* ═══════ SUCCESS REACTION: 🌸 ═══════ */
+    react("🌸");
+
+  } catch (err) {
+    console.error("NPSR ERROR:", err.message);
+    react("⚠️");
+
+    const errorMsg = err.code === 'ECONNABORTED'
+      ? "⚠️ | 𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐨𝐧 𝐭𝐢𝐦𝐞𝐝 𝐨𝐮𝐭. 𝐓𝐫𝐲 𝐚𝐠𝐚𝐢𝐧!"
+      : "⚠️ | 𝐒𝐞𝐫𝐯𝐞𝐫 𝐢𝐬 𝐛𝐮𝐬𝐲 𝐨𝐫 𝐀𝐏𝐈 𝐢𝐬 𝐝𝐨𝐰𝐧. 𝐓𝐫𝐲 𝐚𝐠𝐚𝐢𝐧!";
+
+    return message.reply(serifBold(errorMsg));
+  } finally {
+    if (fs.existsSync(pathVideo)) {
+      setTimeout(() => {
+        try { fs.unlinkSync(pathVideo); } catch(e) {}
+      }, 20000);
+    }
+  }
 }
 
 function serifBold(text) {
