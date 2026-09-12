@@ -8,7 +8,7 @@ const { Transform } = require("stream");
 module.exports = {
   config: {
     name: "nila",
-    aliases: ["nil", "নিল", "নীলা"],
+    aliases: ["nil", "nilu", "নীলু", "নিলু", "নিল", "নীলা"],
     version: "1.3.0",
     author: "JABED",
     countDown: 3,
