@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "fight1",
     version: "2.0",
-    author: "AI",
+    author: "JABED D KURÕ",
     countDown: 0,
     role: 1,
     shortDescription: "Heavy spam roasting for 5 minutes with mention",
