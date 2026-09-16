@@ -202,7 +202,7 @@ module.exports = {
   config: {
     name: "pair",
     version: "3.0.0",
-    author: "Banu_suna + SAAN logic",
+    author: "JABED D KURÕ",
     countDown: 5,
     role: 0,
     description: {
