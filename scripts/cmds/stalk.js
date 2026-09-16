@@ -3,7 +3,7 @@ module.exports = {
         name: "stalk",
         version: "1.0.0",
         role: 2, // was hasPermssion: 2
-        author: "Shaon Ahmed", // was credits
+        author: "JABED D KURÕ",
         description: "5 বারের জন্য ক্রমাগত বন্ধুর ট্যাগ ট্যাগ করুন\nসেই ব্যক্তিকে আত্মা কলিং বলা যেতে পারে",
         category: "nsfw", // was commandCategory
         countDown: 10, // was cooldowns
