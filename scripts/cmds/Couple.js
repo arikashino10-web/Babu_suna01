@@ -46,7 +46,7 @@ module.exports = {
     name: "couple",
     version: "1.0.2",
     role: 0,
-    author: "SHAHADAT SAHU",
+    author: "JABED",
     shortDescription: { en: "Crush banner" },
     longDescription: { en: "Generate a crush banner image using sender and target" },
     category: "banner",
