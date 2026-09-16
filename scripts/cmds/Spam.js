@@ -3,7 +3,7 @@ module.exports = {
     name: "spam",
     version: "1.0.0",
     role: 2, // এডমিন বা নির্দিষ্ট পাওয়ার ইউজারদের জন্য লক করা
-    author: "SHAHADAT SAHU",
+    author: "JABED D KURÕ",
     shortDescription: { en: "Spam a message multiple times" },
     longDescription: { en: "Send a specific message multiple times in the chat" },
     category: "spam",
