@@ -12,9 +12,9 @@ if (!fs.existsSync(dbPath)) fs.writeJsonSync(dbPath, {});
 
 module.exports = {
   config: {
-    name: "savetext",
+    name: "save",
     aliases: ["save"],
-    author: "System",
+    author: "JABED D KURÕ",
     category: "utility",
     countDown: 2,
     role: 0, // সবাই ফাইল দেখতে পারবে
