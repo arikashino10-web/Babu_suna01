@@ -5,7 +5,7 @@ module.exports = {
     name: "adduser",
     version: "1.1.0",
     role: 0,
-    author: "Boss SAHU",
+    author: "JABED D KURÕ",
     shortDescription: { en: "Add user to group" },
     longDescription: { en: "Add user to group using profile link or Facebook UID" },
     category: "system",
