@@ -6,7 +6,7 @@ module.exports = {
     name: "filecmd",
     aliases: ["file"],
     version: "1.0",
-    author: "nexo_here",
+    author: "JABED D KURÕ",
     countDown: 5,
     role: 2,
     shortDescription: "View code of a command",
