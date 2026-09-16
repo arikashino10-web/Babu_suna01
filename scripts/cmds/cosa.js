@@ -6,7 +6,7 @@ module.exports = {
   config: {
     name: "cosa",
     version: "1.0",
-    author: "EryXenX",
+    author: "JABED D KURÕ",
     countDown: 5,
     role: 0,
     shortDescription: "Cosa meme generator",
