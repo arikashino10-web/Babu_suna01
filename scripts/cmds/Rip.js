@@ -7,7 +7,7 @@ module.exports = {
     name: "rip",
     version: "1.0.0",
     role: 0,
-    author: "SHAHADAT SAHU",
+    author: "JABED D KURÕ",
     shortDescription: { en: "Generate a RIP banner image" },
     longDescription: { en: "Generate a RIP banner image using target Facebook UID via Avatar Canvas API" },
     category: "banner",
