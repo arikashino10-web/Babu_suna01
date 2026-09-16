@@ -6,7 +6,7 @@ module.exports = {
     name: "whitelist",
     aliases: ["wl"],
     version: "2.1",
-    author: "NeoKEX",
+    author: "JABED D KURÕ",
     countDown: 5,
     role: 2, // শুধুমাত্র বট অ্যাডমিনরাই (config.json এর adminBot লিস্টে যারা আছে) এই কমান্ড চালাতে পারবে
     description: {
