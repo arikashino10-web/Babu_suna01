@@ -3,7 +3,7 @@ module.exports = {
     name: "tagreply",
     aliases: ["tr", "tagr", "nametag"],
     version: "2.0.0",
-    author: "Banu_suna",
+    author: "JABED D KURÕ",
     countDown: 2,
     role: 0,
     description: {
