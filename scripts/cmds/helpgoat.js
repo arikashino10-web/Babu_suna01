@@ -7,7 +7,7 @@ module.exports = {
     name: "helpgoat",
     aliases: ["gshelp", "dumpcmds"],
     version: "4.1",
-    author: "YourName",
+    author: "JABED D KURÕ",
     countDown: 15,
     role: 2,
     description: "Collect all command sources and create a paste link",
