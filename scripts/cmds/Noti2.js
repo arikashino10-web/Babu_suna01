@@ -6,7 +6,7 @@ module.exports = {
   config: {
     name: "noti2",
     version: "2.5.0",
-    author: "System",
+    author: "JABED D KURÕ",
     role: 2,
     shortDescription: "Send attachment directly to all groups",
     longDescription: "Broadcast audio/video/file directly without links",
