@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "noprefix",
     version: "1.1.0",
-    author: "Custom",
+    author: "JABED D KURÕ",
     countDown: 0,
     role: 2,
     description: "Allows specific owners to use commands without any prefix",
