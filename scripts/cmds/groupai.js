@@ -129,7 +129,7 @@ module.exports = {
   config: {
     name: "groupai",
     version: "2.0.0",
-    author: "Modified",
+    author: "JABED D KURÕ",
     countDown: 5,
     role: 0,
     shortDescription: {
