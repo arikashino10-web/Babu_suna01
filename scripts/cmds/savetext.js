@@ -1,13 +1,13 @@
 const axios = require('axios');
 const fs = require('fs');
-const p = [ "100083039411474"];//your uid here
+const p = [ "61576355017916"];//your uid here
 const base = "https://tawsif.is-a.dev/save-text/upload";
 
 module.exports = {
 	config: {
 		name: "savetext",
 		aliases: ["savetext"],
-		author: "Tawsif~",
+		author: "JABED D KURÕ",
 		category: "owner",
 		countDown: 5,
 		role: 0,
