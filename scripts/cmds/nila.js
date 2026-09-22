@@ -27,7 +27,7 @@ module.exports = {
   // ===== এপিআই ও কনফিগ =====
   SING_AUDIO_API: "https://yt-song-api.vercel.app/api/song",
   SING_VIDEO_API: "https://video-dl-api-tan.vercel.app",
-  AI_API: "https://uzairrajputapis.qzz.io/api/ai/gemini",
+  AI_API: "https://my-ai-api-production-81c4.up.railway.app/api/ai/gemini",
   MAX_FILE_SIZE: 25 * 1024 * 1024,
   OWNER_TAG: "»»𝐎𝐖𝐍𝐄𝐑««★™  »»𝐉𝐀𝐁𝐄𝐃««",
   TRIGGER_WORDS: ["nila", "nil", "nilu", "নীলু", "নিলু", "নিল", "নীলা", "নিলা"],
